@@ -1,0 +1,21 @@
+{
+  "restpose": null,
+  "01a087a7-ff9a-7184-aa0b-c2f5fadc57ec": "Arm_Wave_Dance",
+  "01a0c76d-a109-73f3-9a9e-fcc5c3143c69": "Bend_Down",
+  "01a087aa-09a4-7340-8940-ef6d3a2d582c": null,
+  "01a087ad-c897-73a3-bb31-b363818a0e3b": "Squat_Dance",
+  "01a0b10c-2a88-72cd-9833-76d5c5b72231": "Cheer",
+  "01a0d89b-eee5-7763-9ea7-0c3c40fe9a61": "Crawl",
+  "01a0d8a2-afe1-712a-a3ac-fcc3cb8061e6": "Crawl_All_Fours",
+  "01a0d8a3-3a7f-75da-af65-17cca6768b3a": "Get_Down_And_Up",
+  "01a0d8a5-d5a9-7161-a9bd-a5e60de517dd": "Kneel_Wave",
+  "01a0d8a7-75b5-752b-ba41-33078fdf5aeb": "Kneel_Idle",
+  "360_Power_Spin_Jump": "Jump",
+  "All_Night_Dance": "Dance",
+  "Climb_Attempt_and_Fall_5": null,
+  "Climb_Right_with_Both_Limbs": null,
+  "Climb_Right_with_Both_Limbs_inplace": "Climb_Inplace",
+  "Hang_and_Push_with_Foot": "Hang_Push",
+  "Heavy_Hammer_Swing": "Hammer",
+  "_comment": "GUID-клипы просмотрены покадрово (tools/anim-preview.html): Arm_Wave_Dance — танец руками; Bend_Down — наклон до земли и обратно; Squat_Dance — танец в присядку; Cheer — руки вверх «ура»; Crawl — ползёт на животе; Crawl_All_Fours — на четвереньках; Get_Down_And_Up — опустилась на пол, проползла, встала; Kneel_Wave/Kneel_Idle — сидит на коленях. Отброшены: restpose (поза покоя), 01a087aa… и Climb_Right_with_Both_Limbs (большой уход корня из кадра), Climb_Attempt_and_Fall_5 (падение навзничь из воздуха)."
+}

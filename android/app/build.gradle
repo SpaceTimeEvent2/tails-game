@@ -1,0 +1,25 @@
+// «Хвосты» для Google Play: пакет business.spacecode.tails, игра — локальные файлы (assets/www, копирует sync_web),
+// командная игра — wss://spacecode.business/tails/play/ws. Версия — ../version.properties. Ключ — ../tails-upload.keystore.
+plugins { id 'com.android.application' }
+def props = { f -> def p = new Properties(); def x = rootProject.file(f); if (x.exists()) x.withInputStream { p.load(it) }; p }
+def ver = props('version.properties'), ks = props('keystore.properties')
+android {
+    namespace 'business.spacecode.tails'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'business.spacecode.tails'
+        minSdk 24
+        targetSdk 36
+        versionCode ver.CODE as int
+        versionName ver.NAME
+    }
+    signingConfigs {
+        upload { storeFile rootProject.file('tails-upload.keystore'); storePassword ks.KS_PASS; keyAlias 'upload'; keyPassword ks.KS_PASS }
+    }
+    buildTypes {
+        release { minifyEnabled true; shrinkResources true; proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'); signingConfig signingConfigs.upload }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    androidResources { noCompress += ['glb', 'js', 'wasm'] }
+}
+dependencies { implementation 'androidx.webkit:webkit:1.14.0' }

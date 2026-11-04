@@ -1,0 +1,42 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Клипы персонажа</title>
+<style>body{margin:0;background:#1d2b38;color:#fff;font:13px sans-serif} .row{display:flex;align-items:center;gap:4px;margin:2px 6px}
+.row b{width:250px;font-size:12px;word-break:break-all} img{width:120px;height:150px;background:#8fd4e8}</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three/build/three.module.js", "three/addons/": "../vendor/three/examples/jsm/" } }</script>
+</head><body><div id="out"></div>
+<script type="module">
+// Просмотр клипов персонажа покадрово: tools/anim-preview.html?glb=…&from=0&n=10&frames=6
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+const qs = new URLSearchParams(location.search);
+const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(qs.get('glb') || '../assets/characters/tiny-dancer.glb');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(240, 300);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8fd4e8);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667755, 2.2));
+const grid = new THREE.GridHelper(4, 8); scene.add(grid);
+const model = gltf.scene; scene.add(model);
+const box = new THREE.Box3().setFromObject(model); const h = box.getSize(new THREE.Vector3()).y;
+model.scale.setScalar(2 / h);
+const cam = new THREE.PerspectiveCamera(40, 240 / 300, 0.1, 50);
+const view = qs.get('view') || 'front';
+cam.position.set(view === 'side' ? 4.2 : 1.6, 1.4, view === 'side' ? 0.3 : 3.9); cam.lookAt(0, 1.0, 0);
+const mixer = new THREE.AnimationMixer(model);
+const from = Number(qs.get('from') || 0), n = Number(qs.get('n') || 99), frames = Number(qs.get('frames') || 6);
+const out = document.getElementById('out');
+for (const clip of gltf.animations.slice(from, from + n)) {
+  const row = document.createElement('div'); row.className = 'row';
+  row.innerHTML = `<b>${clip.name}<br>${clip.duration.toFixed(1)} с</b>`;
+  mixer.stopAllAction();
+  const a = mixer.clipAction(clip); a.play();
+  for (let i = 0; i < frames; i++) {
+    mixer.setTime((clip.duration * i) / frames);
+    renderer.render(scene, cam);
+    const img = new Image(); img.src = renderer.domElement.toDataURL(); row.append(img);
+  }
+  out.append(row);
+}
+document.title = 'done';
+</script></body></html>

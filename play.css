@@ -1,0 +1,162 @@
+/* Крупный интерфейс: кнопки под палец, минимум цифр, всё подписано словами. */
+html, body { height: 100%; margin: 0; overflow: hidden; background: #8fd4e8; }
+#scene { display: block; width: 100vw; height: 100vh; touch-action: none; }
+
+#hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  padding: 14px 16px; pointer-events: none; font-family: var(--font);
+}
+#hud > div { display: flex; gap: 8px; align-items: center; }
+.hud-right { pointer-events: auto; }
+
+.stat {
+  padding: 8px 16px; border-radius: 999px;
+  background: #06192bcc; color: var(--foam); border: 1px solid #ffffff2e;
+  font-size: 20px; font-weight: 700; backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px #0a253a55;
+}
+.stat.big { font-size: 26px; letter-spacing: 2px; padding: 6px 18px; }
+.stat.small { font-size: 15px; }
+.stat b { color: var(--mimosa); }
+
+.wave-chip {
+  padding: 8px 18px; border-radius: 999px; font-size: 17px; font-weight: 700;
+  background: #06192bcc; color: var(--foam); border: 1px solid #ffffff2e; backdrop-filter: blur(8px);
+}
+.wave-chip b { color: var(--mimosa); font-size: 21px; }
+.wave-chip span { color: #bcd9e8; font-weight: 500; }
+
+.round {
+  width: 46px; height: 46px; border-radius: 50%; border: 1px solid #ffffff2e;
+  background: #06192bcc; color: #fff; font-size: 20px; line-height: 44px; text-align: center;
+  text-decoration: none; display: inline-block; backdrop-filter: blur(8px);
+}
+.round:hover { background: #0a3450dd; }
+
+/* большие кнопки внизу */
+#big-buttons {
+  position: fixed; right: 18px; bottom: 22px; z-index: 6;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.huge {
+  padding: 16px 26px; border: 0; border-radius: 20px;
+  font-size: 21px; font-weight: 800; font-family: var(--font);
+  background: linear-gradient(180deg, #ffe07a, var(--mimosa)); color: #3a2a00;
+  box-shadow: 0 10px 24px #0a253a66, inset 0 -3px 0 #d9a900;
+  transition: transform .1s, filter .1s;
+}
+.huge:hover { filter: brightness(1.06); }
+.huge:active { transform: translateY(2px); }
+.huge:disabled { filter: grayscale(.6) brightness(.8); box-shadow: none; }
+.huge.rose { background: linear-gradient(180deg, #ff9dbb, var(--oleander)); color: #4a0c1e; box-shadow: 0 10px 24px #0a253a66, inset 0 -3px 0 #d64a70; }
+.huge.ghost { background: #ffffff1a; color: #fff; box-shadow: none; border: 1px solid #ffffff33; text-decoration: none; }
+
+/* карточки подружек */
+#build {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(18px);
+  z-index: 7; display: flex; gap: 12px; padding: 12px;
+  background: #06192bdd; border: 1px solid #ffffff26; border-radius: 22px;
+  box-shadow: 0 18px 44px #04121ea8; backdrop-filter: blur(12px);
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+}
+#build.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+.friend {
+  display: grid; justify-items: center; gap: 2px; width: 108px; padding: 12px 8px;
+  border: 1px solid #ffffff22; border-radius: 16px; background: #ffffff12; color: #fff;
+  font-family: var(--font);
+}
+.friend:hover { background: #ffd4471f; border-color: var(--mimosa); }
+.friend:disabled { opacity: .38; }
+.friend .face { font-size: 34px; line-height: 1.1; }
+.friend b { font-size: 16px; }
+.friend .price { font-size: 14px; color: var(--mimosa); font-weight: 700; }
+
+/* подсказка */
+#toast {
+  position: fixed; left: 50%; top: 76px; bottom: auto;   /* в style.css задан bottom — иначе плашка растянется */
+  transform: translateX(-50%) translateY(-8px);
+  max-width: min(620px, 90vw); text-align: center;
+  z-index: 8; padding: 12px 22px; max-width: 90vw;
+  background: #06192be6; color: #fff; border: 1px solid #ffffff26; border-left: 4px solid var(--mimosa);
+  border-radius: 14px; font-size: 17px; font-weight: 600; font-family: var(--font);
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+}
+#toast.show { opacity: 1; transform: translateX(-50%); }
+
+/* конец игры */
+#overlay {
+  position: fixed; inset: 0; z-index: 20; display: none;
+  place-content: center; justify-items: center; gap: 16px; text-align: center; padding: 24px;
+  background: #04121ee0; backdrop-filter: blur(6px); font-family: var(--font); color: #fff;
+}
+#overlay.show { display: grid; }
+#overlay h2 { margin: 0; font-size: clamp(28px, 7vw, 48px); }
+#overlay p { margin: 0; max-width: 460px; font-size: 17px; line-height: 1.6; color: #cfe6f0; }
+#overlay .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+/* загрузка */
+#loading {
+  position: fixed; inset: 0; z-index: 30; display: grid; place-content: center; justify-items: center; gap: 14px;
+  background: #0a2740; color: #fff; font-family: var(--font); transition: opacity .4s;
+}
+#loading.done { opacity: 0; pointer-events: none; }
+.tail-spin { font-size: 44px; animation: swing 1.1s ease-in-out infinite; }
+@keyframes swing { 0%,100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
+#loading .bar { width: 240px; height: 5px; border-radius: 5px; background: #ffffff22; overflow: hidden; }
+#loading .bar i { display: block; height: 100%; width: 0; background: var(--mimosa); transition: width .2s; }
+
+/* тряска, когда утащили хвостик */
+@keyframes shake { 0%,100% { transform: none; } 20% { transform: translateX(-8px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
+body.shake { animation: shake .5s; }
+
+@media (max-width: 720px) {
+  .huge { font-size: 18px; padding: 14px 20px; }
+  .friend { width: 88px; }
+  .stat.big { font-size: 21px; }
+}
+
+/* ── командная игра: список игроков ── */
+#team { position: fixed; left: 14px; top: 76px; z-index: 5; display: none; flex-direction: column; gap: 6px;
+        font-family: var(--font); pointer-events: none; }
+body.team #team { display: flex; }
+#team .code { padding: 4px 12px; border-radius: 999px; background: #06192bcc; color: #cfe6f0; font-size: 14px; width: max-content; }
+#team .code b { color: var(--mimosa); letter-spacing: 3px; font-size: 17px; }
+#team .pl { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 14px; background: #06192bcc;
+            color: #fff; border: 2px solid transparent; font-size: 15px; }
+#team .pl.me { border-color: var(--c); }
+#team .pl.off { opacity: .5; }
+#team .pl .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
+#team .pl i { font-style: normal; }
+#team .pl .sh { color: var(--mimosa); font-weight: 700; margin-left: auto; padding-left: 8px; }
+
+/* ── персонаж: экранный джойстик и кнопки ── */
+#joy { position: fixed; left: 22px; bottom: 26px; z-index: 6; width: 132px; height: 132px; border-radius: 50%;
+       background: #06192b66; border: 2px solid #ffffff44; display: none; touch-action: none; }
+#joy.show { display: block; }
+body:not(.runner-on) #joy { display: none; }
+#joy i { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%;
+         background: linear-gradient(180deg, #ffe07a, var(--mimosa)); box-shadow: 0 6px 16px #0006; }
+#big-buttons .huge.ghost { backdrop-filter: blur(8px); background: #06192bbb; }
+.friend.info { cursor: default; }
+
+#ov-stars { font-size: 44px; letter-spacing: 6px; min-height: 1px; }
+
+#wait-host { position: fixed; inset: 0; z-index: 15; display: none; place-content: center; justify-items: center; gap: 8px;
+             background: #04121e99; color: #fff; font-family: var(--font); font-size: 20px; }
+#wait-host.show { display: grid; }
+
+@media (max-width: 720px) {
+  #team { top: 64px; font-size: 13px; }
+  #big-buttons .huge.ghost { padding: 10px 14px; font-size: 15px; }
+}
+
+/* style.css задаёт #hud во всю высоту колонкой (от старой версии) — тут HUD одной строкой сверху */
+#hud { flex-direction: row; bottom: auto; inset: 0 0 auto 0; }
+[hidden] { display: none !important; }
+@media (max-width: 1000px) {
+  .stat.big { font-size: 17px; letter-spacing: 0; padding: 6px 10px; }
+  .wave-chip { font-size: 14px; padding: 6px 12px; }
+  .wave-chip span { display: none; }
+  .stat { font-size: 16px; padding: 6px 12px; }
+}

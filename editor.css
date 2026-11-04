@@ -1,0 +1,33 @@
+#tools { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; gap: 8px; padding: 8px;
+         background: #06192bdd; border-radius: 20px; border: 1px solid #ffffff26; }
+#tools button { display: grid; justify-items: center; gap: 2px; width: 84px; padding: 8px 4px; font-size: 26px; border-radius: 14px;
+                border: 2px solid transparent; background: #ffffff12; color: #fff; }
+#tools button b { font-size: 13px; }
+#tools button.on { border-color: var(--mimosa); background: #ffd4472a; }
+#side { position: fixed; top: 0; right: 0; bottom: 0; width: 300px; z-index: 6; overflow: auto; padding: 14px 16px;
+        background: #06192bee; color: var(--foam); font-family: var(--font); display: grid; gap: 10px; align-content: start; }
+#side h2, #side h3 { margin: 4px 0; }
+#side .back { color: #cfe6f0; text-decoration: none; }
+#side .field { display: grid; gap: 4px; font-size: 13px; color: #b8d2e0; }
+#side input, #side select, #side textarea { font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 10px;
+        border: 1px solid #ffffff33; background: #061a2b; color: #fff; width: 100%; box-sizing: border-box; }
+#side textarea { font-family: monospace; font-size: 12px; word-break: break-all; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btns .btn { justify-content: center; padding: 10px 8px; font-size: 14px; }
+#status { padding: 10px 12px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+#status.ok { background: #9be37a22; border: 1px solid #9be37a; }
+#status.bad { background: #ff6f9122; border: 1px solid #ff6f91; }
+#mine { display: grid; gap: 6px; }
+#mine .it { display: flex; gap: 6px; align-items: center; padding: 6px 8px; border-radius: 10px; background: #ffffff10; font-size: 14px; }
+#mine .it span { flex: 1; }
+#mine .it button { padding: 4px 8px; border-radius: 8px; border: 0; background: #ffffff1c; color: #fff; }
+body #big-buttons { right: 318px; }
+body #toast { left: calc(50% - 150px); }
+@media (max-width: 860px) {
+  #side { top: auto; height: 42vh; width: auto; left: 0; }
+  body #big-buttons { right: 12px; bottom: calc(42vh + 12px); }
+  #tools button { width: 60px; font-size: 22px; }
+  #joy { bottom: calc(42vh + 16px); }
+}
+body #toast { top: 128px; }

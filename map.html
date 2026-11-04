@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хвосты — уровни</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="menu.css">
+</head>
+<body>
+<div class="waves"></div>
+<main id="pick">
+  <a class="back" href="index.html">← Карты</a>
+  <h1 class="title" id="title"></h1>
+  <p class="sub" id="about"></p>
+  <div class="levels" id="levels"></div>
+  <p class="hint">Пройди уровень — откроется следующий. Звёзды: ⭐⭐⭐ — ни одного хвостика не утащили.</p>
+</main>
+<script type="module">
+import { mapById, progress } from './src/levels.js';
+const m = mapById(new URLSearchParams(location.search).get('map'));
+document.title = `Хвосты — ${m.name}`;
+document.getElementById('title').textContent = `${m.emoji} ${m.name}`;
+document.getElementById('about').textContent = m.about;
+const open = progress.unlocked(m.id);
+document.getElementById('levels').innerHTML = m.levels.map((l) => {
+  const ok = l.id <= open;
+  const st = progress.stars(m.id, l.id);
+  const stars = '⭐'.repeat(st) + '<span class="off">' + '★'.repeat(3 - st) + '</span>';
+  const inner = `<span class="num">${ok ? l.id : '🔒'}</span><span class="name">${l.name}</span>
+    <span class="about">${ok ? l.hint : 'откроется, когда пройдёшь предыдущий'}</span>
+    <span class="meta">${stars} · волн ${l.target}${l.players ? ` · игроков ${l.players}` : ''}</span>`;
+  return ok ? `<a class="lvl" href="play.html?map=${m.id}&level=${l.id}" data-level="${l.id}">${inner}</a>`
+            : `<div class="lvl locked">${inner}</div>`;
+}).join('');
+</script>
+</body>
+</html>

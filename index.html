@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хвосты — во что играем?</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="menu.css">
+</head>
+<body>
+<div class="waves"></div>
+<main id="pick">
+  <h1 class="title">Хвосты</h1>
+  <p class="sub">Во что играем?</p>
+  <div class="choices" id="maps"></div>
+  <div class="choices small">
+    <a class="choice team" href="lobby.html" id="c-team">
+      <span class="big-emoji">👫</span>
+      <span class="name">Командная игра</span>
+      <span class="about">До четырёх друзей: общий домик, у каждого свои ракушки и подружки.</span>
+    </a>
+    <a class="choice make" href="editor.html" id="c-editor">
+      <span class="big-emoji">🛠</span>
+      <span class="name">Создать уровень</span>
+      <span class="about">Бегай по полю и строй свою дорожку. Сохраняй, играй, делись кодом.</span>
+    </a>
+  </div>
+</main>
+<script type="module">
+import { MAPS, progress } from './src/levels.js';
+let last = 'quay';
+try { last = localStorage.getItem('tails.choice') || 'quay'; } catch (e) { /* */ }
+document.getElementById('maps').innerHTML = Object.values(MAPS).map((m) => {
+  const stars = progress.totalStars(m.id), max = m.levels.length * 3;
+  return `<a class="choice${m.id === last ? ' last' : ''}" href="map.html?map=${m.id}" data-map="${m.id}">
+    ${m.id === last ? '<span class="badge">в прошлый раз</span>' : ''}
+    <img src="${m.preview}" alt="">
+    <span class="name">${m.emoji} ${m.name}</span>
+    <span class="about">${m.about}</span>
+    <span class="meta">${m.levels.length} уровней · ⭐ ${stars} из ${max}</span>
+  </a>`;
+}).join('');
+</script>
+</body>
+</html>

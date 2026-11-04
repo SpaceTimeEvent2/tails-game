@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хвосты</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="play.css">
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<div id="hud">
+  <div class="hud-left">
+    <div class="stat big" id="tails-box"><span id="tails">🎀🎀🎀🎀🎀</span></div>
+    <div class="stat" title="Мои ракушки">🐚 <b id="shells">0</b></div>
+  </div>
+  <div class="hud-center">
+    <div class="wave-chip">Волна <b id="wave-num">—</b> <span id="wave-place"></span></div>
+  </div>
+  <div class="hud-right">
+    <button id="btn-cam" class="round" title="Общий вид" hidden>🗺</button>
+    <button id="btn-voice" class="round" title="Голос">🔊</button>
+    <a class="round" id="btn-home" href="index.html" title="Домой">🏠</a>
+    <div class="stat small" title="Рекорд">🏆 <b id="best">0</b></div>
+  </div>
+</div>
+
+<div id="team"></div>
+
+<div id="big-buttons">
+  <button id="btn-here" class="huge ghost" hidden title="E">🧱 Строить тут</button>
+  <button id="btn-jump" class="huge ghost" hidden title="Пробел">🤸 Прыжок</button>
+  <button id="btn-dance" class="huge rose">💃 Танцуем!</button>
+  <button id="btn-wave" class="huge">🌊 Волна!</button>
+</div>
+
+<div id="joy"><i></i></div>
+
+<div id="build"></div>
+<div id="toast"></div>
+
+<div id="wait-host"><div class="tail-spin">🎀</div><p>Ждём ведущего игры…</p></div>
+
+<div id="overlay">
+  <h2 id="ov-title"></h2>
+  <div id="ov-stars"></div>
+  <p id="ov-text"></p>
+  <div class="row" id="ov-buttons"></div>
+</div>
+
+<div id="loading">
+  <div class="tail-spin">🎀</div>
+  <div id="load-text">Собираем подружек на набережной…</div>
+  <div class="bar"><i id="load-bar"></i></div>
+</div>
+
+<script type="module" src="src/kid-td.js"></script>
+</body>
+</html>

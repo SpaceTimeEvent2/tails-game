@@ -1,0 +1,22 @@
+// Кадры бегающего персонажа в игре (бег, прыжок, стройка, «ура»): node tools/runner-shots.mjs (сервер на :8795)
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: '/snap/bin/chromium', headless: true, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p = await b.newPage(); await p.setViewport({ width: 900, height: 600 });
+const errs = []; p.on('pageerror', (e) => errs.push(e.message)); p.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
+await p.goto('http://127.0.0.1:8795/play.html?map=castle&level=1&debug');
+await p.waitForFunction(() => window.__td && document.getElementById('loading').classList.contains('done'), { timeout: 60000 });
+const zoom = () => p.evaluate(() => { const r = window.__td.runner.root.position, c = window.__td.camera, t = window.__td.controls; t.target.set(r.x, 2, r.z); c.position.set(r.x + 9, 7, r.z + 12); });
+await zoom(); await new Promise((r) => setTimeout(r, 500));
+console.log('clips', await p.evaluate(() => Object.keys(window.__td.runner.actions).join(',')));
+await p.keyboard.down('KeyA'); await new Promise((r) => setTimeout(r, 900)); await zoom();
+await p.screenshot({ path: process.env.HOME + '/tails-shots/runner-1-run.png' }); await p.keyboard.up('KeyA');
+await new Promise((r) => setTimeout(r, 600)); await zoom();
+await p.keyboard.press('Space'); await new Promise((r) => setTimeout(r, 700));
+await p.screenshot({ path: process.env.HOME + '/tails-shots/runner-2-jump.png' });
+await new Promise((r) => setTimeout(r, 2600));
+await p.evaluate(() => { const s = window.__td.nearestSpot(); window.__td.runner.build(); });
+await new Promise((r) => setTimeout(r, 900));
+await p.screenshot({ path: process.env.HOME + '/tails-shots/runner-3-hammer.png' });
+await p.evaluate(() => window.__td.runner.cheer(true)); await new Promise((r) => setTimeout(r, 2500));
+await p.screenshot({ path: process.env.HOME + '/tails-shots/runner-4-cheer.png' });
+console.log(errs.length ? errs : 'консоль чистая'); await b.close();
