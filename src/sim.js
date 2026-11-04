@@ -49,13 +49,16 @@ export const WAVE_PAUSE = 4.5;          // секунд между волнам�
 export const SHOT_SPEED = 30;           // скорость снаряда, ед/с
 export const DANCE_LEN = 5, DANCE_COOLDOWN = 22;
 
+/** Множитель здоровья теней для команды: свой у уровня (level.teamHp), иначе общий из TEAM. */
+export const teamHp = (level, m) => (m.n > 1 && level.teamHp ? level.teamHp[m.n - 2] : m.hp);
+
 /** Волна n на уровне level при множителях команды m (для одного игрока все множители = 1). */
 export function waveInfo(n, level, m = teamMult(1)) {
   const baseCount = Math.min(3 + Math.floor(n * 0.9), 28);
   return {
     n,
     count: Math.max(1, Math.round(baseCount * m.count)),
-    hp: Math.round(24 * Math.pow(level.hpGrow || HP_GROW, n - 1) * (level.speed || 1) * (level.hpK || 1) * m.hp),
+    hp: Math.round(24 * Math.pow(level.hpGrow || HP_GROW, n - 1) * (level.speed || 1) * (level.hpK || 1) * teamHp(level, m)),
     speed: Math.min(2 + n * 0.03, 4.4) * (level.speed || 1),
     bounty: Math.max(1, Math.round((6 + Math.floor(n / 2)) * m.bounty)),
     bonus: Math.round((20 + n * 3) * m.bonus),

@@ -350,7 +350,27 @@ function fitLevels() {
   }
 }
 
-if (args.includes('--fit-levels')) fitLevels();
+/** Свой множитель здоровья для 2–4 игроков на каждом уровне: запас домика команды = запасу одного игрока. */
+function fitTeamLevels() {
+  for (const l0 of allLevels) {
+    const l = { ...l0, teamHp: undefined };
+    const solo = stats(l, 1, (k) => TEAM[k]).health;
+    const res = [];
+    for (const n of [2, 3, 4]) {
+      let lo = 0.2, hi = 4;
+      for (let it = 0; it < 8; it++) {
+        const mid = Math.sqrt(lo * hi);
+        const h = stats(l, n, (k) => (k === n ? { ...TEAM[k], hp: mid } : TEAM[k])).health;
+        if (h > solo) lo = mid; else hi = mid;
+      }
+      res.push(Math.round(Math.sqrt(lo * hi) * 100) / 100);
+    }
+    console.log(`${l.map}/${l.id}: teamHp [${res.join(', ')}]  (соло ${pct(solo)})`);
+  }
+}
+
+if (args.includes('--fit-team-levels')) fitTeamLevels();
+else if (args.includes('--fit-levels')) fitLevels();
 else if (args.includes('--fit')) fit();
 else if (args.includes('--solo')) {
   for (const l of allLevels) {
