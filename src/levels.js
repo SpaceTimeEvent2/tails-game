@@ -234,6 +234,13 @@ export const LAB_LEVELS = [
   },
 ];
 
+/** Гонки в космическом тоннеле (src/race.js): трасса задаётся параметрами, строит её race-sim.js. */
+export const RACE_LEVELS = [
+  { id: 1, name: 'Орбита', hint: 'Широкие проходы и пологие виражи: привыкни к заносу.', seed: 11, length: 2600, vmax: 70, drift: 0.5, coil: [46, 340], sway: 40, gap: 230, hole: 6.2, kinds: ['gate', 'rocks', 'gate', 'half'], target: 3 },
+  { id: 2, name: 'Кольца', hint: 'Быстрее и круче, появляются вращающиеся балки.', seed: 27, length: 3400, vmax: 85, drift: 0.65, coil: [62, 300], sway: 50, gap: 200, hole: 5.4, kinds: ['gate', 'rocks', 'half', 'bar'], target: 3 },
+  { id: 3, name: 'Чёрная дыра', hint: 'Самый длинный и крутой тоннель. На такой скорости заносит всерьёз!', seed: 42, length: 4400, vmax: 100, drift: 0.8, coil: [80, 270], sway: 60, gap: 180, hole: 4.8, kinds: ['gate', 'bar', 'rocks', 'half', 'bar'], target: 3 },
+];
+
 export const MAPS = {
   quay: {
     id: 'quay', name: 'Набережная', emoji: '🎀', preview: 'assets/preview-tails.jpg',
@@ -243,6 +250,11 @@ export const MAPS = {
     id: 'castle', name: 'Замок', emoji: '🏰', preview: 'assets/castle/preview.jpg',
     about: 'Пять залов замка: строй башни и расти их до настоящей крепости. Тут водятся привидения!',
     levels: CASTLE_LEVELS,
+  },
+  race: {
+    id: 'race', name: 'Гонка', emoji: '🚀', preview: 'assets/preview-race.jpg', race: true,
+    about: 'Космический тоннель: лети как самолёт, разгоняйся и не вылети на вираже.',
+    levels: RACE_LEVELS,
   },
   lab: {
     id: 'lab', name: 'Эксперимент', emoji: '🧪', preview: 'assets/preview-boka.jpg', hidden: true,

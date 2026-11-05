@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хвосты — гонка</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="play.css">
+<link rel="stylesheet" href="race.css">
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
+</head>
+<body class="runner-on">
+<canvas id="scene"></canvas>
+
+<div id="race-hud">
+  <a class="round" id="btn-home" href="map.html?map=race" title="К трассам">🏠</a>
+  <div class="stat" id="place-box">🏁 <b id="place">1</b>/<span id="place-of">1</span></div>
+  <div id="track-bar"><i id="track-dots"></i></div>
+  <div class="stat small" id="clock">0:00</div>
+  <button class="round" id="btn-voice" type="button" title="Звук">🔊</button>
+</div>
+<div id="speed"><b id="speed-num">0</b><div id="speed-bar"><i id="speed-fill"></i></div></div>
+<div id="drift-chip" hidden>💨 Заносит!</div>
+<div id="count" hidden></div>
+
+<div id="brake-zone"><span>🛑 Тормоз</span></div>
+<div id="joy"><i></i></div>
+<div id="toast"></div>
+<div id="wait-host"><div class="tail-spin">🚀</div><p>Ждём остальных…</p></div>
+
+<div id="overlay">
+  <h2 id="ov-title"></h2>
+  <div id="ov-stars"></div>
+  <div id="ov-table"></div>
+  <div class="row" id="ov-buttons"></div>
+</div>
+
+<div id="loading">
+  <div class="tail-spin">🚀</div>
+  <div id="load-text">Заправляем тоннель звёздами…</div>
+  <div class="bar"><i id="load-bar"></i></div>
+</div>
+
+<script type="module" src="src/race.js"></script>
+</body>
+</html>

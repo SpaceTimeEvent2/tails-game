@@ -1,0 +1,248 @@
+/**
+ * Гонка в космическом тоннеле: трасса и физика без графики (проверка: tools/race-test.mjs).
+ * Персонаж летит вперёд по оси тоннеля (s) и свободно смещается в его сечении (x вправо, y вверх).
+ * Разгон плавный. Сцепление падает с квадратом скорости, а сила на вираже растёт с квадратом скорости:
+ * чем быстрее летишь, тем сильнее заносит.
+ */
+export const TUBE_R = 12;                 // радиус тоннеля
+export const BODY_R = 1.3;                // персонаж как круг в сечении
+const DS = 2;                             // шаг точек оси
+const PAD = 160;                          // хвост трассы за финишем
+const ACCEL = 0.16;                       // разгон: доля оставшейся до максимума скорости в секунду
+const BRAKE = 55;
+const THRUST = 52;                        // ускорение от руля
+const GRIP_SLOW = 7, GRIP_FAST = 1.15;    // сцепление на малой и на полной скорости
+export const START_S = 30;
+
+export function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/** def: { seed, length, vmax, drift, coil: [радиус, длина витка], sway, gap, kinds, hole } */
+export function buildTrack(def) {
+  const r = rng(def.seed);
+  const total = def.length + PAD;
+  const [A, wave] = def.coil, w = (2 * Math.PI) / wave, ph = r() * 6.28;
+  const sw = def.sway, sw1 = (2 * Math.PI) / (wave * 2.7), ph2 = r() * 6.28;
+  // z растёт всегда: тоннель не может пересечь сам себя
+  const center = (u) => {
+    const e = smooth(0, 220, u) * smooth(0, 200, total * 1.05 - u);
+    const k = e * (0.6 + 0.4 * Math.sin(u * w * 0.31 + ph2));
+    return [k * A * Math.sin(u * w + ph) + e * sw * Math.sin(u * sw1 + ph2),
+            k * A * Math.cos(u * w + ph) + e * sw * Math.cos(u * sw1 * 0.7 + ph), u];
+  };
+  const n = Math.ceil(total / DS) + 1;
+  const pos = new Float32Array(n * 3);
+  let u = 0, [px, py, pz] = center(0);
+  pos.set([px, py, pz], 0);
+  for (let i = 1; i < n; i++) {           // равномерно по длине дуги
+    let left = DS;
+    while (left > 1e-3) {
+      const [x, y, z] = center(u + 0.2);
+      const d = Math.hypot(x - px, y - py, z - pz);
+      if (d >= left) { const f = left / d; px += (x - px) * f; py += (y - py) * f; pz += (z - pz) * f; u += 0.2 * f; left = 0; }
+      else { px = x; py = y; pz = z; u += 0.2; left -= d; }
+    }
+    pos.set([px, py, pz], i * 3);
+  }
+  const tan = new Float32Array(n * 3), up = new Float32Array(n * 3), right = new Float32Array(n * 3);
+  let ux = 0, uy = 1, uz = 0;
+  for (let i = 0; i < n; i++) {           // оси сечения переносятся без лишнего кручения
+    const a = Math.max(0, i - 1) * 3, b = Math.min(n - 1, i + 1) * 3;
+    let tx = pos[b] - pos[a], ty = pos[b + 1] - pos[a + 1], tz = pos[b + 2] - pos[a + 2];
+    const l = Math.hypot(tx, ty, tz); tx /= l; ty /= l; tz /= l;
+    const dot = ux * tx + uy * ty + uz * tz;
+    ux -= dot * tx; uy -= dot * ty; uz -= dot * tz;
+    const m = Math.hypot(ux, uy, uz); ux /= m; uy /= m; uz /= m;
+    tan.set([tx, ty, tz], i * 3); up.set([ux, uy, uz], i * 3);
+    right.set([ty * uz - tz * uy, tz * ux - tx * uz, tx * uy - ty * ux], i * 3);
+  }
+  // кривизна в осях сечения: куда тянет вираж
+  const bend = new Float32Array(n * 2);
+  let bendMax = 1e-4;
+  const H = 4;
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - H) * 3, b = Math.min(n - 1, i + H) * 3, len = ((b - a) / 3) * DS;
+    const kx = (tan[b] - tan[a]) / len, ky = (tan[b + 1] - tan[a + 1]) / len, kz = (tan[b + 2] - tan[a + 2]) / len;
+    const j = i * 3;
+    bend[i * 2] = kx * right[j] + ky * right[j + 1] + kz * right[j + 2];
+    bend[i * 2 + 1] = kx * up[j] + ky * up[j + 1] + kz * up[j + 2];
+    bendMax = Math.max(bendMax, Math.hypot(bend[i * 2], bend[i * 2 + 1]));
+  }
+  const track = { def, length: def.length, total, n, pos, tan, up, right, bend,
+    // на полной скорости в самом крутом месте сила заноса = drift × сила руля: удержаться можно, но трудно
+    cf: (def.drift * THRUST) / (bendMax * def.vmax * def.vmax), obstacles: makeObstacles(def, r) };
+  return track;
+}
+
+function makeObstacles(def, r) {
+  const out = [], R = TUBE_R;
+  let s = 280, since = 0;
+  while (s < def.length - 180) {
+    const kind = def.kinds[Math.floor(r() * def.kinds.length)];
+    const a = r() * Math.PI * 2;
+    const o = { kind, s, i: out.length };
+    if (kind === 'gate') {
+      o.hole = def.hole;
+      const off = r() * (R - def.hole - 1.2);
+      o.x = Math.cos(a) * off; o.y = Math.sin(a) * off;
+    } else if (kind === 'half') {
+      o.a = a; o.d = -1;                 // закрыта половина сечения в сторону a
+    } else if (kind === 'bar') {
+      o.a = a; o.w = (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.6); o.hw = 1.1;
+    } else if (kind === 'rocks') {
+      o.rocks = [];
+      const cnt = 2 + Math.floor(r() * 3);
+      for (let i = 0, g = 0; i < cnt && g < 40; g++) {
+        const q = r() * 6.28, d = r() * (R - 3), rr = 2.6 + r() * 1.5;
+        const x = Math.cos(q) * d, y = Math.sin(q) * d;
+        if (o.rocks.every((k) => Math.hypot(k.x - x, k.y - y) > k.r + rr + 5.5)) { o.rocks.push({ x, y, r: rr }); i++; }
+      }
+    }
+    out.push(o);
+    since++;
+    const step = def.gap * (0.85 + r() * 0.5);
+    if (since >= 3) {                     // ускоритель между преградами
+      since = 0;
+      const off = r() * (R - 5);
+      out.push({ kind: 'boost', s: s + step / 2, x: Math.cos(a + 2) * off, y: Math.sin(a + 2) * off, hole: 3.2, i: out.length });
+    }
+    s += step;
+  }
+  return out;
+}
+
+/** Точка на оси: индексы и доля для плавной выборки. */
+export function sample(track, s, arr, out, stride = 3) {
+  const f = Math.max(0, Math.min(track.n - 1.001, s / DS)), i = Math.floor(f), t = f - i;
+  for (let c = 0; c < stride; c++) out[c] = arr[i * stride + c] * (1 - t) + arr[(i + 1) * stride + c] * t;
+  return out;
+}
+
+export const barAngle = (o, t) => o.a + o.w * t;
+
+/** Задета ли преграда в точке (x, y) сечения в момент t. */
+export function hits(o, x, y, t) {
+  switch (o.kind) {
+    case 'gate': return Math.hypot(x - o.x, y - o.y) > o.hole - BODY_R * 0.55;
+    case 'half': return x * Math.cos(o.a) + y * Math.sin(o.a) > o.d;
+    case 'bar': { const b = barAngle(o, t); return Math.abs(-x * Math.sin(b) + y * Math.cos(b)) < o.hw + BODY_R * 0.55; }
+    case 'rocks': return o.rocks.some((k) => Math.hypot(x - k.x, y - k.y) < k.r + BODY_R * 0.55);
+    default: return false;
+  }
+}
+
+export function newRacer(lane = 0) {
+  const a = (lane / 4) * Math.PI * 2 + Math.PI / 4;
+  return { s: START_S, x: Math.cos(a) * 4, y: Math.sin(a) * 4, vx: 0, vy: 0, v: 0, next: 0, stun: 0, safe: 0, scrape: 0, slip: 0, fin: 0 };
+}
+
+/**
+ * Один шаг. input: { x, y, brake } в [-1, 1]; vmaxK — множитель скорости (боты).
+ * Возвращает список событий: ['hit'] | ['boost'] | ['wall'].
+ */
+export function stepRacer(p, input, track, t, dt, vmaxK = 1) {
+  const ev = [];
+  const vmax = track.def.vmax * vmaxK;
+  // плавный разгон: чем ближе к максимуму, тем медленнее; после ускорителя лишнее так же плавно гаснет
+  if (input.brake) p.v = Math.max(track.def.vmax * 0.18, p.v - BRAKE * dt);
+  else p.v += (vmax - p.v) * ACCEL * dt + (p.v < vmax * 0.12 ? 6 * dt : 0);
+  const k = Math.min(1.3, p.v / track.def.vmax), k2 = k * k;
+  const grip = GRIP_SLOW + (GRIP_FAST - GRIP_SLOW) * Math.min(1, k2);
+  const steer = p.stun > 0 ? 0 : 1;
+  const b = [0, 0];
+  sample(track, p.s, track.bend, b, 2);
+  const cx = -b[0] * track.cf * p.v * p.v, cy = -b[1] * track.cf * p.v * p.v;  // наружу из виража
+  p.vx += (input.x * THRUST * steer + cx - p.vx * grip) * dt;
+  p.vy += (input.y * THRUST * steer + cy - p.vy * grip) * dt;
+  p.x += p.vx * dt;
+  p.y += p.vy * dt;
+  p.slip = Math.hypot(cx, cy) / THRUST;
+  p.stun = Math.max(0, p.stun - dt);
+  p.safe = Math.max(0, p.safe - dt);
+  p.scrape = Math.max(0, p.scrape - dt);
+  // стенка: скользим вдоль неё и теряем скорость
+  const lim = TUBE_R - BODY_R, r = Math.hypot(p.x, p.y);
+  if (r > lim) {
+    const nx = p.x / r, ny = p.y / r, out = p.vx * nx + p.vy * ny;
+    p.x = nx * lim; p.y = ny * lim;
+    if (out > 0) { p.vx -= nx * out * 1.35; p.vy -= ny * out * 1.35; }
+    p.v *= 1 - Math.min(0.5, dt * 0.55);
+    if (p.scrape <= 0 && out > 6) ev.push(['wall']);
+    p.scrape = 0.25;
+  }
+  p.s += p.v * dt;
+  // пролетели плоскость преграды
+  const obs = track.obstacles;
+  while (p.next < obs.length && obs[p.next].s <= p.s) {
+    const o = obs[p.next++];
+    if (o.kind === 'boost') {
+      if (Math.hypot(p.x - o.x, p.y - o.y) < o.hole) { p.v = Math.min(track.def.vmax * 1.3, p.v * 1.14 + 6); ev.push(['boost']); }
+    } else if (p.safe <= 0 && hits(o, p.x, p.y, t)) {
+      p.v *= 0.42;
+      p.stun = 0.3;
+      p.safe = 1.1;
+      ev.push(['hit', o.kind]);
+    }
+  }
+  if (!p.fin && p.s >= track.length) { p.fin = t; ev.push(['fin']); }
+  if (p.s > track.total - 40) { p.s = track.total - 40; p.v = 0; }
+  return ev;
+}
+
+/** Куда лететь, чтобы пройти преграду. */
+export function safePoint(o, t, x, y) {
+  switch (o.kind) {
+    case 'gate': case 'boost': return [o.x, o.y];
+    case 'half': return [-Math.cos(o.a) * 6.5, -Math.sin(o.a) * 6.5];
+    case 'bar': {
+      const b = barAngle(o, t), s = -x * Math.sin(b) + y * Math.cos(b) >= 0 ? 1 : -1;
+      return [-Math.sin(b) * 7.5 * s, Math.cos(b) * 7.5 * s];
+    }
+    case 'rocks': {
+      let best = [0, 0], bd = -1;
+      for (let i = 0; i < 25; i++) {
+        const q = i < 8 ? (i / 8) * 6.28 : ((i - 8) / 17) * 6.28, d = i < 8 ? 4 : 8;
+        const px = i === 24 ? 0 : Math.cos(q) * d, py = i === 24 ? 0 : Math.sin(q) * d;
+        const c = Math.min(...o.rocks.map((k) => Math.hypot(px - k.x, py - k.y) - k.r)) - Math.hypot(px - x, py - y) * 0.03;
+        if (c > bd) { bd = c; best = [px, py]; }
+      }
+      return best;
+    }
+    default: return [0, 0];
+  }
+}
+
+/** Бот: летит к безопасной точке следующей преграды и гасит занос. skill: { miss, vmaxK, sloppy, seed } */
+export function botInput(p, track, t, skill, out) {
+  const obs = track.obstacles;
+  let o = obs[p.next];
+  // ускоритель берём, только если следующая за ним преграда далеко
+  if (o && o.kind === 'boost') {
+    const after = obs[p.next + 1];
+    if (skill.miss > 0.2 || (after && after.s - o.s < 40)) o = after;
+  }
+  let tx = 0, ty = 0;
+  if (o && o.s - p.s < p.v * 1.5 + 30) {
+    const mark = (o.s * 7919 + skill.seed * 104729) % 1000 / 1000;
+    if (mark >= skill.miss) {
+      const arrive = t + (o.s - p.s) / Math.max(p.v, 10);
+      [tx, ty] = safePoint(o, arrive, p.x, p.y);
+    }
+  }
+  const b = [0, 0];
+  sample(track, p.s, track.bend, b, 2);
+  const comp = (track.cf * p.v * p.v) / THRUST;
+  out.x = Math.max(-1, Math.min(1, (tx - p.x) * 0.5 - p.vx * 0.09 + b[0] * comp * skill.sloppy));
+  out.y = Math.max(-1, Math.min(1, (ty - p.y) * 0.5 - p.vy * 0.09 + b[1] * comp * skill.sloppy));
+  out.brake = false;
+  return out;
+}

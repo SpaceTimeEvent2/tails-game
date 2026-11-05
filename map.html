@@ -71,9 +71,9 @@ function showMap() {
     const stars = '⭐'.repeat(st) + '<span class="off">' + '★'.repeat(3 - st) + '</span>';
     const inner = `<span class="num">${ok ? l.id : '🔒'}</span><span class="name">${l.name}</span>
       <span class="about">${ok ? l.hint : 'откроется, когда пройдёшь предыдущий'}</span>
-      <span class="meta">${stars} · волн ${l.target}</span>`;
+      <span class="meta">${stars}${m.race ? ` · ${(l.length / 1000).toFixed(1)} км` : ` · волн ${l.target}`}</span>`;
     const bg = `style="--img:url('${m.preview}')"`;
-    return ok ? `<a class="lvl" ${bg} href="play.html?map=${m.id}&level=${l.id}" data-level="${l.id}">${inner}</a>`
+    return ok ? `<a class="lvl" ${bg} href="${m.race ? `race.html?level=${l.id}` : `play.html?map=${m.id}&level=${l.id}`}" data-level="${l.id}">${inner}</a>`
               : `<div class="lvl locked" ${bg}>${inner}</div>`;
   }).join('');
 }

@@ -71,7 +71,7 @@ net.on('left', () => { room = null; showRoom(); });
 net.on('down', () => err('Нет связи с сервером — переподключаемся…'));
 net.on('welcome', () => { err(''); net.send({ t: 'list' }); });
 
-function go() { net.close(); location.href = `play.html?room=${room.code}${qs.has('debug') ? '&debug' : ''}`; }
+function go() { net.close(); location.href = `${MAPS[room.map]?.race ? 'race' : 'play'}.html?room=${room.code}${qs.has('debug') ? '&debug' : ''}`; }
 
 function showRoom() {
   $('room-panel').hidden = !room;

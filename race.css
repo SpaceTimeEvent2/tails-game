@@ -1,0 +1,36 @@
+/* Гонка в космическом тоннеле */
+html, body { background: #05061a; }
+body { touch-action: none; user-select: none; -webkit-user-select: none; }
+#race-hud { position: fixed; z-index: 5; top: max(8px, env(safe-area-inset-top)); left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right));
+  display: flex; align-items: center; gap: 8px; font-family: var(--font); pointer-events: none; }
+#race-hud .round, #race-hud a { pointer-events: auto; flex: none; }
+#race-hud .stat { flex: none; padding: 5px 12px; font-size: 16px; }
+#race-hud .round { width: 40px; height: 40px; line-height: 38px; font-size: 18px; padding: 0; }
+#track-bar { position: relative; flex: 1; height: 10px; border-radius: 6px; background: #ffffff22; }
+#track-bar .dot { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--c); border: 2px solid #06192b; }
+#track-bar .dot.me { width: 22px; height: 22px; margin: -11px 0 0 -11px; border-color: #fff; z-index: 2; }
+#speed { position: fixed; z-index: 5; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(220px, 36vw); text-align: center; color: #fff; font: 800 15px var(--font); pointer-events: none; }
+#speed b { font-size: 20px; }
+#speed-bar { height: 8px; border-radius: 5px; background: #ffffff26; overflow: hidden; }
+#speed-fill { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #6fe3ff, #ffd447 65%, #ff5a3c); background-size: min(220px, 36vw) 100%; }
+#drift-chip { position: fixed; z-index: 6; left: 50%; bottom: calc(52px + env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 3px 14px; border-radius: 999px; background: #e0472ee6; color: #fff; font: 800 15px var(--font); pointer-events: none; }
+#count { position: fixed; z-index: 7; inset: 0; display: grid; place-items: center; font: 900 clamp(70px, 26vh, 150px) var(--font); color: #fff; text-shadow: 0 0 28px #6fe3ff; pointer-events: none; }
+#count[hidden] { display: none; }
+#brake-zone { position: fixed; z-index: 4; top: 56px; right: 0; bottom: 0; width: 34vw; display: none; align-items: flex-end; justify-content: flex-end; padding: 0 calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) 0; touch-action: none; }
+#brake-zone span { padding: 16px 22px; border-radius: 20px; background: #06192bbb; border: 2px solid #ffffff44; color: #fff; font: 800 18px var(--font); backdrop-filter: blur(6px); }
+#brake-zone.on span { background: linear-gradient(180deg, #ff8a6b, #e0472e); border-color: #fff; }
+@media (pointer: coarse) { #brake-zone { display: flex; } }
+#overlay table { border-collapse: collapse; color: #fff; font-size: 16px; }
+#ov-table { display: grid; gap: 4px; min-width: min(360px, 80vw); }
+#ov-table .r { display: flex; align-items: center; gap: 10px; padding: 5px 12px; border-radius: 12px; background: #ffffff14; border: 2px solid transparent; font-size: 15px; text-align: left; }
+#ov-table .r.me { border-color: var(--c); }
+#ov-table .r .n { flex: 1; }
+#ov-table .r .d { width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
+#ov-stars:empty { display: none; }
+@media (max-height: 520px) {
+  #overlay { gap: 6px; padding: 8px; }
+  #ov-table .r { padding: 2px 10px; font-size: 13px; }
+  #brake-zone span { padding: 10px 14px; font-size: 15px; }
+  #joy { left: 18px; bottom: 16px; }
+}
+#ov-buttons a.huge { text-decoration: none; display: inline-block; }

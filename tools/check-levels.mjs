@@ -2,7 +2,7 @@
 import { MAPS, spotsOf, pathDist, houseOf, pathsOf } from '../src/levels.js';
 import { mazeState } from '../src/sim.js';
 let bad = 0;
-for (const m of Object.values(MAPS)) {
+for (const m of Object.values(MAPS).filter((x) => !x.race)) {   // трассы гонок проверяет race-test.mjs
   for (const l of m.levels) {
     if (l.maze) {
       const st = mazeState(l, new Set());

@@ -147,3 +147,6 @@ input.code { text-transform: uppercase; letter-spacing: 5px; width: 6.6em; flex:
   .choice .about { display: none; }
   .back, .pill { min-height: 32px; }
 }
+
+/* четыре карты в ряд, на телефоне лёжа тоже */
+@media (orientation: landscape) { .home-grid #maps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

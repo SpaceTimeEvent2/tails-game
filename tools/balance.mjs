@@ -148,7 +148,7 @@ function stats(level, n, mult, seeds = SEEDS) {
 /* ─────────────────── подбор множителей ─────────────────── */
 
 const only = opt('--level');   // например --level castle/3
-const allLevels = Object.values(MAPS).filter((m) => !m.hidden || only).flatMap((m) => m.levels).filter((l) => !only || only.split(',').includes(`${l.map}/${l.id}`));
+const allLevels = Object.values(MAPS).filter((m) => !m.race && (!m.hidden || only)).flatMap((m) => m.levels).filter((l) => !only || only.split(',').includes(`${l.map}/${l.id}`));
 const meanHealth = (n, mult) => {
   let h = 0;
   for (const l of allLevels) h += stats(l, n, mult).health;
