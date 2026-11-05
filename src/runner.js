@@ -351,13 +351,14 @@ export class Joystick {
     if (coarse) el.classList.add('show');
     this.knob = el.querySelector('i');
     const R = 46;
-    let id = null, cx = 0, cy = 0;
+    let id = null, cx = 0, cy = 0, tap = null;
     const set = (e) => {
       let dx = e.clientX - cx, dy = e.clientY - cy;
       const l = Math.hypot(dx, dy);
       if (l > R) { dx *= R / l; dy *= R / l; }
       this.x = dx / R; this.y = -dy / R;
       this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      if (tap && l > 16) tap = null;
     };
     el.addEventListener('pointerdown', (e) => {
       id = e.pointerId;
@@ -373,8 +374,26 @@ export class Joystick {
       if (e.pointerId !== id) return;
       id = null; this.active = false; this.x = 0; this.y = 0;
       this.knob.style.transform = '';
+      el.style.transform = '';
+      if (tap && e.type === 'pointerup' && performance.now() - tap.t < 300) tap.fn(tap.x, tap.y);
+      tap = null;
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    /** Джойстик появляется под пальцем там, где inZone(x, y); короткое нажатие без движения уходит в onTap (плиты под зоной). */
+    this.floatIn = (canvas, inZone, onTap) => {
+      addEventListener('pointerdown', (e) => {
+        if (id !== null || e.pointerType === 'mouse' || e.target !== canvas || !inZone(e.clientX, e.clientY)) return;
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        const r = el.getBoundingClientRect();
+        el.style.transform = `translate(${e.clientX - r.left - r.width / 2}px, ${e.clientY - r.top - r.height / 2}px)`;
+        id = e.pointerId;
+        el.setPointerCapture(id);
+        cx = e.clientX; cy = e.clientY;
+        this.active = true;
+        tap = { fn: onTap, x: cx, y: cy, t: performance.now() };
+      }, { capture: true });
+    };
   }
 }

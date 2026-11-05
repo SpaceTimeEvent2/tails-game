@@ -24,10 +24,21 @@
   <button data-tool="spawn" title="3">🚪<b>Старт</b></button>
   <button data-tool="house" title="4">🏠<b>Домик</b></button>
   <button data-tool="erase" title="5">🧽<b>Убрать</b></button>
+  <button id="btn-undo" type="button" disabled>↩️<b>Назад</b></button>
 </div>
+<div id="rail">
+  <button id="r-play" type="button">▶️<b>Играть</b></button>
+  <button id="r-save" type="button">💾<b>Сохранить</b></button>
+  <button id="r-more" type="button">⚙️<b>Ещё</b></button>
+  <button id="r-fit" type="button">🔎<b>Всё поле</b></button>
+  <a id="r-home" href="index.html">🏠<b>Домой</b></a>
+</div>
+<div id="st-mini"></div>
+<div id="scrim"></div>
 
 <aside id="side">
   <a class="back" href="index.html">← Домой</a>
+  <button id="side-close" type="button">✕ К полю</button>
   <label class="field">Название<input type="text" id="name" maxlength="24"></label>
   <div class="row2">
     <label class="field">Волн<input type="number" id="target" min="3" max="25" value="8"></label>
@@ -38,9 +49,11 @@
     <label class="field">👻 Привидения<select id="ghosts"></select></label>
   </div>
   <div class="field">Кого можно строить<div id="friends" class="pick"></div></div>
+  <div id="foreign" hidden></div>
   <div id="status"></div>
   <div class="btns">
     <button class="btn" id="btn-save">💾 Сохранить</button>
+    <button class="btn" id="btn-copy" hidden>📄 Копировать</button>
     <button class="btn" id="btn-play">▶ Играть</button>
     <button class="btn ghost" id="btn-team">👫 С друзьями</button>
     <button class="btn ghost" id="btn-export">📋 Код</button>

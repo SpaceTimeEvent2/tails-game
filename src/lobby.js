@@ -4,6 +4,7 @@
 import { MAPS, resolveLevel } from './levels.js';
 import { Net, me, saveMe, COLORS, EMOJIS } from './net.js';
 import { myLevels, decode } from './custom.js';
+import { EXPERIMENTAL } from './flags.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -19,7 +20,7 @@ $('me').style.setProperty('--c', profile.color);
 /* ── выбор карты и уровня ── */
 const my = myLevels.list();
 const fromEditor = qs.get('map') === 'custom' && qs.get('code') && decode(qs.get('code')) ? qs.get('code') : null;
-$('map').innerHTML = Object.values(MAPS).map((m) => `<option value="${m.id}">${m.emoji} ${m.name}</option>`).join('')
+$('map').innerHTML = Object.values(MAPS).filter((m) => !m.hidden || EXPERIMENTAL).map((m) => `<option value="${m.id}">${m.emoji} ${m.name}</option>`).join('')
   + (my.length || fromEditor ? '<option value="custom">🛠 Мои уровни</option>' : '');
 function fillLevels() {
   const m = $('map').value;
@@ -30,11 +31,13 @@ function fillLevels() {
     $('level').innerHTML = MAPS[m].levels.map((l) => `<option value="${l.id}">${l.id}. ${l.name}${l.players ? ` (игроков ${l.players})` : ''}</option>`).join('');
   }
 }
-$('map').onchange = fillLevels;
+const ffRow = () => { $('ff-row').hidden = $('map').value !== 'lab'; };
+$('map').onchange = () => { fillLevels(); ffRow(); };
 if (fromEditor) $('map').value = 'custom';
 if (qs.get('map') && MAPS[qs.get('map')]) $('map').value = qs.get('map');
 fillLevels();
 if (qs.get('level') && $('map').value !== 'custom') $('level').value = qs.get('level');
+ffRow();
 
 /* ── сеть ── */
 const net = new Net();
@@ -46,6 +49,7 @@ const mapName = (r) => (r.map === 'custom' ? '🛠 Свой уровень' : `$
 const levelName = (r) => r.levelName || (resolveLevel(r.map, r.level, r.lv) || {}).name || '';
 
 net.on('rooms', (m) => {
+  if (!EXPERIMENTAL) m.rooms = m.rooms.filter((r) => !MAPS[r.map]?.hidden);    // экспериментальные игры видны только в экспериментальной сборке
   $('games').innerHTML = m.rooms.length ? m.rooms.map((r) => `
     <div class="game" data-code="${r.code}">
       <div class="what"><b>${mapName(r)} · ${esc(levelName(r))}</b><br><span class="empty">ведёт ${esc(r.host)} · код ${r.code}</span></div>
@@ -95,7 +99,7 @@ $('btn-create').onclick = () => {
   const map = $('map').value;
   const pub = document.querySelector('input[name=vis]:checked').value === 'pub';
   if (map === 'custom') net.send({ t: 'create', map: 'custom', lv: $('level').value, pub });
-  else net.send({ t: 'create', map, level: Number($('level').value), pub });
+  else net.send({ t: 'create', map, level: Number($('level').value), pub, ff: map === 'lab' && $('ff').checked });
 };
 $('btn-start').onclick = () => net.send({ t: 'start' });
 $('btn-leave').onclick = () => net.send({ t: 'leave' });

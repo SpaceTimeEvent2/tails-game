@@ -90,7 +90,7 @@ const send = (ws, msg) => { if (ws && ws.readyState === 1) ws.send(typeof msg ==
 
 function roomView(r) {
   return {
-    code: r.code, map: r.map, level: r.level, lv: r.lv, levelName: r.levelName, pub: r.pub, status: r.status, host: r.host,
+    code: r.code, map: r.map, level: r.level, lv: r.lv, levelName: r.levelName, pub: r.pub, ff: !!r.ff, status: r.status, host: r.host,
     players: r.order.map((tok) => {
       const p = people.get(tok);
       return { id: p.id, name: p.name, color: p.color, emoji: p.emoji, hero: p.hero, tint: p.tint, online: !!p.ws };
@@ -214,7 +214,7 @@ wss.on('connection', (ws, req) => {
         if (rooms.size >= MAX_ROOMS) { send(ws, { t: 'error', msg: 'Сервер занят, попробуй позже' }); break; }
         const code = newCode();
         if (me.room) leaveRoom(me, 'create');
-        const room = { code, map: map.id, level: level.id, lv, levelName: level.name, pub: !!m.pub, status: 'wait', host: me.id, order: [], created: Date.now(), navUntil: 0 };
+        const room = { code, map: map.id, level: level.id, lv, levelName: level.name, pub: !!m.pub, ff: map.id === 'lab' && !!m.ff, status: 'wait', host: me.id, order: [], created: Date.now(), navUntil: 0 };
         rooms.set(code, room);
         log(`room ${code}: создал ${me.name}#${me.id} (${map.id}/${level.id}, ${room.pub ? 'открытая' : 'по коду'})`);
         joinRoom(me, room);

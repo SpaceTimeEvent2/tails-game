@@ -11,8 +11,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { touchCamera } from './touch-camera.js';
-import { mapById, resolveLevel, spotsOf, houseOf, pathsOf, progress } from './levels.js';
+import { touchCamera, instantPress, thumbZone } from './touch-camera.js';
+import { audio } from './audio.js';
+import { mapById, resolveLevel, spotsOf, houseOf, pathsOf, progress, teamLevel } from './levels.js';
 import { HERO, Sim, FRIENDS, FRIEND_KEYS, Path, mazeState, starsFor, towerStats, START_TAILS, DANCE_LEN } from './sim.js';
 import { Net, me as myProfile } from './net.js';
 import { myLevels } from './custom.js';
@@ -75,6 +76,8 @@ if (ROOM) {
   if (!level) failPage('Уровень не открывается — проверь код');
 }
 const TEAM = !!ROOM;
+const customBack = qs.get('from') === 'editor' ? 'editor.html' : 'map.html?map=custom';
+if (TEAM) level = teamLevel(level);
 const MAP = level.map === 'custom' ? { id: 'custom', name: 'Мои уровни', levels: [] } : mapById(level.map);
 document.title = `Хвосты — ${level.name}`;
 try { localStorage.setItem('tails.choice', level.map); } catch (e) { /* */ }
@@ -798,12 +801,7 @@ function showBuild(spotIndex) {
     host.append(up);
     const ow = view.players.get(tower.owner);
     if (!ow || !ow.active) {
-      const bye = document.createElement('button');
-      bye.className = 'friend';
-      bye.dataset.act = 'sell';
-      bye.innerHTML = `<span class="face">🏠</span><b>Домой</b><span class="price">🐚 +${Math.round(towerSpent(tower) / 2)}</span>`;
-      bye.onclick = () => { doAct({ k: 'sell', s: spotIndex }); hideBuild(); };
-      host.append(bye);
+      host.append(sellButton(spotIndex, tower));
     }
   } else if (tower) {
     const upCost = towerUpCost(tower);
@@ -813,12 +811,7 @@ function showBuild(spotIndex) {
     up.innerHTML = `<span class="face">⬆️</span><b>Подрасти</b><span class="price">🐚 ${upCost}</span>`;
     up.disabled = shells < upCost;
     up.onclick = () => { if (doAct({ k: 'up', s: spotIndex })) setTimeout(() => { if (pickedSpot === spotIndex) showBuild(spotIndex); }, 250); };
-    const bye = document.createElement('button');
-    bye.className = 'friend';
-    bye.dataset.act = 'sell';
-    bye.innerHTML = `<span class="face">🏠</span><b>Домой</b><span class="price">🐚 +${Math.round(towerSpent(tower) / 2)}</span>`;
-    bye.onclick = () => { doAct({ k: 'sell', s: spotIndex }); hideBuild(); };
-    host.append(up, bye);
+    host.append(up, sellButton(spotIndex, tower));
   } else {
     for (const id of FRIEND_IDS) {
       const f = FRIENDS[id];
@@ -832,6 +825,29 @@ function showBuild(spotIndex) {
     }
   }
   host.classList.add('show');
+}
+
+/** Продажа в два нажатия: первое спрашивает, второе продаёт. Если не подтвердить за 3 секунды, кнопка вернётся. */
+function sellButton(spotIndex, tower) {
+  const price = Math.round(towerSpent(tower) / 2);
+  const b = document.createElement('button');
+  b.className = 'friend sell';
+  b.dataset.act = 'sell';
+  const idle = `<span class="face">💰</span><b>Продать</b><span class="price">🐚 +${price}</span>`;
+  b.innerHTML = idle;
+  let armed = 0;
+  b.onclick = () => {
+    if (!armed) {
+      b.classList.add('confirm');
+      b.innerHTML = `<span class="face">❓</span><b>Точно продать?</b><span class="price">🐚 +${price}</span>`;
+      armed = setTimeout(() => { armed = 0; b.classList.remove('confirm'); b.innerHTML = idle; }, 3000);
+      return;
+    }
+    clearTimeout(armed);
+    doAct({ k: 'sell', s: spotIndex });
+    hideBuild();
+  };
+  return b;
 }
 
 const hideBuild = () => { pickedSpot = -1; $('build').classList.remove('show'); highlight(-1); };
@@ -860,6 +876,7 @@ function handleEvents(events) {
   for (const ev of events) {
     switch (ev[0]) {
       case 'b': {
+        audio.sfx('build');
         const t = view.towers.get(ev[1]);
         const f = t && FRIENDS[t.id];
         if (MAZE) redrawRoute(view.towers);
@@ -869,6 +886,7 @@ function handleEvents(events) {
         break;
       }
       case 'u': {
+        audio.sfx('grow');
         const ta = towerActors.get(ev[1]);
         const t = view.towers.get(ev[1]);
         if (ta) sparks(ta.actor.root.position, 8);
@@ -887,6 +905,7 @@ function handleEvents(events) {
         const ta = towerActors.get(ev[1]);
         const target = enemyActors.get(ev[2]);
         if (!ta || !target) break;
+        audio.sfx('shoot');
         const tp = target.actor.root.position;
         if (ta.actor.aim) ta.actor.aim(tp);
         else ta.actor.root.lookAt(tmp.copy(tp).setY(ta.actor.root.position.y));
@@ -903,18 +922,34 @@ function handleEvents(events) {
       }
       case 'k': {
         const p = posOfEnemy(ev[1]);
-        if (p) sparks(p, ev[3] ? 8 : 3, ev[3] ? 0xff6f91 : 0xffd447);
-        if (ev[3] && ev[2] === myId) toast(`❤️ +${ev[3]} — монстр побеждён!`, 1600);
+        const big = !!ev[6];
+        if (p) sparks(p, big ? 26 : ev[3] ? 8 : 3, ev[3] ? 0xff6f91 : 0xffd447);
+        if (big) { audio.sfx('bigdown'); kick('shake', 500); say('Большая тень побеждена!'); }
+        if (ev[3]) {                                // убил персонаж: жизни и серия
+          audio.sfx('kill');
+          if (ev[2] === myId) {
+            if (p) floatText(p, `+${ev[3]} ❤️`, '#ff6f91', 1.25);
+            if (ev[5] >= 2) { audio.sfx('combo', ev[5]); showCombo(ev[5]); }
+          }
+        } else {                                    // убила башня: ракушки всем
+          audio.sfx('pop');
+          audio.sfx('shell');
+          if (p && ev[4]) floatText(p, `+${ev[4]} 🐚`, '#ffd447');
+        }
         break;
       }
       case 'm': {                                   // удар персонажа
         const p = posOfEnemy(ev[1]);
         if (p) sparks(p, 5, 0xffffff);
-        if (ev[2] === myId) { if (runner) runner.build(); } else if (others.has(ev[2])) others.get(ev[2]).build();
+        audio.sfx('hit');
+        if (ev[2] === myId) { kick('punch', 140); if (runner) runner.build(); } else if (others.has(ev[2])) others.get(ev[2]).build();
         break;
       }
       case 'h':                                     // монстр ударил персонажа
         if (ev[1] === myId) {
+          audio.sfx('hurt');
+          hideCombo();
+          if (runner) floatText(runner.root.position, 'Ой! −❤️', '#ff4d4d');
           document.body.classList.add('hurt');
           setTimeout(() => document.body.classList.remove('hurt'), 260);
           if (runner) sparks(runner.root.position, 5, 0xff4d4d);
@@ -922,36 +957,52 @@ function handleEvents(events) {
         break;
       case 'o':                                     // жизни кончились
         if (ev[1] === myId) {
+          audio.sfx('ko');
           if (runner) { runner.stop(); runner.cheer(false); }
           say('Ой, устала! Надо отдохнуть.');
           toast(`💤 Жизни кончились. Отдых ${ev[2]} с — башни пока работают сами`, 4000);
         }
         break;
       case 'r':                                     // вернулся
-        if (ev[1] === myId && runner) { runner.stop(); runner.endShot(); placeAtHome(); toast('❤️ Снова в строю!', 1600); }
+        if (ev[1] === myId && runner) { audio.sfx('revive'); runner.stop(); runner.endShot(); placeAtHome(); toast('❤️ Снова в строю!', 1600); }
         break;
+      case 'P': {                                   // удар по союзнику
+        audio.sfx('hit');
+        const vp = ev[2] === myId ? runner : others.get(ev[2]);
+        if (vp) { sparks(vp.root.position, ev[5] ? 16 : 6, 0xff4d4d); if (ev[4]) floatText(vp.root.position, `−${ev[4]} 🐚`, '#ff6f91'); }
+        if (ev[1] === myId) { kick('punch', 140); if (runner) runner.build(); toast(`🥊 ${ownerName(ev[2])}${ev[5] ? ' в нокауте' : ''}: +${ev[4]} 🐚`, 1800); }
+        else if (others.has(ev[1])) others.get(ev[1]).build();
+        if (ev[2] === myId) { audio.sfx('hurt'); hideCombo(); kick('hurt', 260); toast(`🥊 ${ownerName(ev[1])} ударил тебя и забрал ${ev[4]} 🐚`, 2200); }
+        break;
+      }
       case 'G':                                     // призрак подрос
-        if (ev[1] === myId) { if (runner) sparks(runner.root.position, 12, 0xbfe6ff); toast(`👻 Призрак подрос! Стадия ${ev[2]} из ${HERO.growCost.length + 1}`, 1800); say('Расту!'); }
+        if (ev[1] === myId) { audio.sfx('grow'); if (runner) sparks(runner.root.position, 12, 0xbfe6ff); toast(`👻 Призрак подрос! Стадия ${ev[2]} из ${HERO.growCost.length + 1}`, 1800); say('Расту!'); }
         break;
       case 'i':                                     // кто-то отошёл или вернулся
         if (ev[1] !== myId && TEAM) toast(ev[2] ? `💤 ${ownerName(ev[1])} отошёл — волны станут меньше, половина ракушек у вас` : `👋 ${ownerName(ev[1])} вернулся`, 3000);
         break;
       case 'l':
-        document.body.classList.add('shake');
-        setTimeout(() => document.body.classList.remove('shake'), 500);
+        audio.sfx('leak');
+        kick('shake', 500);
         say(ev[2] > 0 ? 'Ой! Хвостик утащили!' : 'Хвостики кончились!');
         if (ev[2] > 0) toast(`🎀 Хвостик утащили. Осталось ${ev[2]}`);
         break;
       case 'w':
         if (level.map !== 'custom') progress.setBest(level.map, level.id, ev[1]);
         say(`Волна ${ev[1]}!`);
+        audio.music(true);
+        audio.setLevel(ev[2] ? 2 : 1);
+        audio.sfx(ev[2] ? 'bigwave' : 'wave');
         toast(`🌊 Волна ${ev[1]}${ev[2] ? ' — большая тень!' : ''}`);
         break;
       case 'c':
         toast(`✨ Волна ${ev[1]} прошла! Ракушек +${ev[2]}`);
+        audio.setLevel(0);
+        audio.sfx('clear');
         say('Молодец!');
         break;
       case 'd':
+        audio.sfx('dance');
         for (const ta of towerActors.values()) ta.actor.play('dance', 1.3, 0.15);
         setTimeout(() => { for (const ta of towerActors.values()) ta.actor.play('idle', ta.actor.def.idleSpeed, 0.3); }, DANCE_LEN * 1000);
         runner && runner.dance(DANCE_LEN);
@@ -963,6 +1014,51 @@ function handleEvents(events) {
       case 'e': finish(!!ev[1], ev[2]); break;
       default:
     }
+  }
+}
+
+/* ── сочность: короткие всплески, подписи над монстрами, серия, салют ── */
+function kick(cls, ms) {
+  document.body.classList.remove(cls);
+  void document.body.offsetWidth;
+  document.body.classList.add(cls);
+  setTimeout(() => document.body.classList.remove(cls), ms);
+}
+const floats = [];
+function floatText(pos, text, color = '#ffd447', scale = 1) {
+  if (floats.length >= 14) { const f = floats.shift(); scene.remove(f.sp); f.sp.material.map.dispose(); f.sp.material.dispose(); }
+  const sp = makeLabel(text, color, scale);
+  sp.position.set(pos.x + rnd(-0.8, 0.8), 7.5, pos.z + rnd(-0.5, 0.5));
+  scene.add(sp);
+  floats.push({ sp, life: 1 });
+}
+function updateFloats(dt) {
+  for (let i = floats.length - 1; i >= 0; i--) {
+    const f = floats[i];
+    f.life -= dt / 1.15;
+    f.sp.position.y += dt * 4;
+    f.sp.material.opacity = Math.min(1, f.life * 2.2);
+    if (f.life <= 0) { scene.remove(f.sp); f.sp.material.map.dispose(); f.sp.material.dispose(); floats.splice(i, 1); }
+  }
+}
+let comboT = 0;
+function showCombo(n) {
+  const el = $('combo');
+  el.hidden = false;
+  el.textContent = `🔥 ×${n}${n >= HERO.combo3 ? ' · жизни ×3' : n >= HERO.combo2 ? ' · жизни ×2' : ''}`;
+  el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+  clearTimeout(comboT);
+  comboT = setTimeout(hideCombo, HERO.comboWindow * 1000);
+}
+function hideCombo() { clearTimeout(comboT); $('combo').hidden = true; }
+function confetti() {
+  const colors = [0xffd447, 0xff6f91, 0x8fd0ff, 0x9be37a, 0xc7b0ff, 0xffa45c];
+  const at = new THREE.Vector3();
+  for (let i = 0; i < 7; i++) {
+    setTimeout(() => {
+      at.copy(house.position).add(new THREE.Vector3(rnd(-16, 16), rnd(2, 9), rnd(-14, 14)));
+      sparks(at, 16, colors[i % colors.length]);
+    }, i * 220);
   }
 }
 
@@ -978,9 +1074,14 @@ function afterSimEvents() {
 
 /* ─────────────────── конец уровня ─────────────────── */
 
+let finished = false;
 function finish(won, tails) {
-  if ($('overlay').classList.contains('show')) return;
+  if (finished) return;
+  finished = true;
   const stars = won ? starsFor(tails) : 0;
+  audio.music(false);
+  audio.sfx(won ? 'win' : 'lose');
+  if (won) confetti();
   const custom = level.map === 'custom';
   const next = custom ? null : MAP.levels.find((l) => l.id === level.id + 1);
   if (won && !custom) { progress.unlock(level.map, level.id + 1); progress.setStars(level.map, level.id, stars); }
@@ -1003,11 +1104,12 @@ function finish(won, tails) {
     const more = document.createElement('button');
     more.className = 'huge ghost';
     more.textContent = won ? '🌊 Ещё волны здесь' : '↻ Ещё раз';
-    more.onclick = () => { if (won) { $('overlay').classList.remove('show'); doAct({ k: 'more' }); } else location.reload(); };
+    more.onclick = () => { if (won) { finished = false; $('overlay').classList.remove('show'); doAct({ k: 'more' }); } else location.reload(); };
     row.append(more);
   }
-  link('🏠 Домой', custom ? 'editor.html' : `map.html?map=${level.map}`);
-  $('overlay').classList.add('show');
+  link('🏠 Домой', custom ? customBack : `map.html?map=${level.map}`);
+  // сначала дать порадоваться салюту, потом итоги
+  setTimeout(() => $('overlay').classList.add('show'), won ? 1500 : 0);
   say(won ? 'Ура! Уровень пройден!' : 'Ничего страшного! Попробуем ещё раз!');
 }
 
@@ -1035,6 +1137,8 @@ function updateRunners(dt) {
   if (myPlayer() && myPlayer().down) { mag = 0; _dir.set(0, 0, 0); }   // отдыхает
   runner.move(_dir, mag, dt, LAND_R - 2);
   if (myPlayer()) runner.setGrow(myPlayer().grow);
+  if (runner.air && !runner.wasAir) audio.sfx(runner.hopK > 1.15 ? 'hop' : 'jump', runner.hopK);
+  runner.wasAir = runner.air;
   const hopK = runner.hopK;
   $('hop').hidden = hopK < 1.15;
   if (hopK >= 1.15) $('hop').textContent = `🐇 ×${hopK.toFixed(1)}`;
@@ -1115,22 +1219,28 @@ $('btn-voice').onclick = () => {
   voiceOn = !voiceOn;
   localStorage.setItem('tails.voice', voiceOn ? 'on' : 'off');
   $('btn-voice').textContent = voiceOn ? '🔊' : '🔇';
+  audio.setOn(voiceOn);
   if (!voiceOn && synth) { try { synth.cancel(); } catch (e) { /* */ } }
 };
 $('btn-voice').textContent = voiceOn ? '🔊' : '🔇';
-$('btn-home').href = TEAM ? 'lobby.html' : level.map === 'custom' ? 'editor.html' : `map.html?map=${level.map}`;
+$('btn-home').href = TEAM ? 'lobby.html' : level.map === 'custom' ? customBack : `map.html?map=${level.map}`;
 $('btn-home').addEventListener('click', () => { if (net) net.send({ t: 'leave' }); });
 $('btn-cam').hidden = !RUNNER_ON;
 $('btn-cam').onclick = () => {
   follow = !follow;
   $('btn-cam').textContent = follow ? '🗺' : '🏃';
   $('btn-cam').title = follow ? 'Общий вид' : 'Камера за мной';
+  controls.enablePan = !follow;
   if (!follow) fitCamera(); else if (runner) runner.following = true;
 };
+if (RUNNER_ON) controls.enablePan = false;       // камера за персонажем: два пальца только приближают, а не утаскивают её
 $('btn-jump').hidden = !RUNNER_ON;
 const tryJump = () => { if (runner && !(myPlayer() && myPlayer().down)) runner.jump(); };
 $('btn-jump').onclick = tryJump;
 $('btn-hit').hidden = !RUNNER_ON;
+$('btn-pvp').hidden = !(RUNNER_ON && room && room.ff);
+$('btn-pvp').onclick = () => { if (runner) doAct({ k: 'pvp' }); };
+if (room && room.ff) setTimeout(() => toast('🥊 Friendly fire: можно бить союзников и отбирать их ракушки!', 5000), 1500);
 $('btn-grow').hidden = !RUNNER_ON || profile.hero !== 'ghost';
 $('btn-grow').onclick = () => doAct({ k: 'grow' });
 $('lives-box').hidden = !RUNNER_ON;
@@ -1138,7 +1248,14 @@ const strike = () => { if (runner) doAct({ k: 'hit', air: runner.air ? 1 : 0 });
 $('btn-hit').onclick = strike;
 $('btn-here').hidden = !RUNNER_ON;
 $('btn-here').onclick = () => { const s = nearestSpot(); if (s >= 0) { highlight(s); showBuild(s); } else toast('Подбеги к плите поближе'); };
+instantPress($('big-buttons'));
+instantPress($('build'));
+thumbZone(canvas, $('big-buttons'), { near: [$('btn-jump'), $('btn-hit'), $('btn-here')], onTap: pickAt });
+if (RUNNER_ON) joy.floatIn(canvas, (x, y) => x < innerWidth * 0.4 && y > innerHeight * 0.4, pickAt);
 if (TEAM) document.body.classList.add('team');
+audio.setOn(voiceOn);
+for (const n of ['pointerdown', 'keydown']) addEventListener(n, () => audio.unlock(), { capture: true });
+audio.music(true);
 if (RUNNER_ON) document.body.classList.add('runner-on');
 
 addEventListener('keydown', (e) => {
@@ -1146,6 +1263,7 @@ addEventListener('keydown', (e) => {
   if (RUNNER_ON && /^(KeyW|KeyA|KeyS|KeyD|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(e.code)) { keys.add(e.code); e.preventDefault(); return; }
   if (e.code === 'Space') { e.preventDefault(); if (RUNNER_ON) tryJump(); else doAct({ k: 'wave' }); }
   if ((e.code === 'KeyQ' || e.code === 'KeyR') && RUNNER_ON && !e.repeat) strike();
+  if (e.code === 'KeyX' && room && room.ff && !e.repeat && runner) doAct({ k: 'pvp' });
   if (e.code === 'KeyG' && RUNNER_ON && !e.repeat && profile.hero === 'ghost') doAct({ k: 'grow' });
   if (e.code === 'Enter' || e.code === 'KeyV') doAct({ k: 'wave' });
   if (e.code === 'KeyF' || (!RUNNER_ON && e.code === 'KeyD')) $('btn-dance').click();
@@ -1181,10 +1299,12 @@ function becomeHost() {
   const players = [...roster.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, emoji: p.emoji }));
   if (lastSnap) {
     sim = Sim.fromSnapshot(level, SPOTS2, lastSnap, players);
+    sim.ff = !!(room && room.ff);
     hostSyncRoster();
     toast('👑 Ведущий ушёл — теперь игру ведёшь ты. Играем дальше!', 4000);
   } else {
     sim = new Sim(level, { players, spots: SPOTS2 });
+    sim.ff = !!(room && room.ff);
   }
   $('wait-host').classList.remove('show');
   viewFromSim();
@@ -1273,6 +1393,7 @@ function tick() {
   syncEnemies(dt);
   for (const ta of towerActors.values()) ta.actor.update(dt);
   updateRunners(dt);
+  updateFloats(dt);
   if (runner) runner.update(dt);
   for (const o of others.values()) o.update(dt);
 
@@ -1395,6 +1516,7 @@ function begin() {
     viewFromSim();
   } else if (isHost) {
     sim = new Sim(level, { players: [...roster.values()].map((p) => ({ id: p.id, name: p.name, color: p.color, emoji: p.emoji })), spots: SPOTS2 });
+    sim.ff = !!(room && room.ff);
     viewFromSim();
   } else {
     lastSnapAt = performance.now();
@@ -1407,7 +1529,7 @@ function begin() {
   tick();
   if (DEBUG) {
     window.__td = { joy, view, get sim() { return sim; }, doAct, showBuild, SPOTS, spotMeshes, camera, controls, level,
-      get isHost() { return isHost; }, get myId() { return myId; }, get runner() { return runner; }, touchCam, others, keys, pickAt,
+      get isHost() { return isHost; }, get myId() { return myId; }, get runner() { return runner; }, touchCam, audio, scene, house, get loader() { return loader; }, floatText, others, keys, pickAt,
       net, roster, get lastSnap() { return lastSnap; }, nearestSpot, towerActors, enemyActors, renderer };
   }
 }

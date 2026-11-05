@@ -22,7 +22,7 @@ for (const m of Object.values(MAPS)) {
     const needPath = m.id === 'castle' ? 7 : 4.6, needPair = m.id === 'castle' ? 12 : 5.5;
     const maxPt = Math.max(...paths.flat().map((p) => Math.hypot(...p)));
     // карта «Набережная» — исходные уровни как есть (только сообщаем), «Замок» — проверяем строго
-    const ok = m.id === 'quay' || (m.id === 'boka' && spots.length >= 8 && minPath >= 4.6) || (spots.length >= 6 && minPath >= needPath && minPair >= needPair && maxPt <= 48);
+    const ok = m.id === 'quay' || (spots.length >= 6 && minPath >= needPath && minPair >= needPair && maxPt <= 48);
     if (!ok) bad++;
     console.log(`${ok ? 'ok ' : 'BAD'} ${m.id}/${l.id} ${l.name.padEnd(20)} плит ${spots.length}  до дороги ≥${minPath.toFixed(1)}  между ≥${minPair.toFixed(1)}  дальняя точка ${far.toFixed(1)}  домик ${h.map((v) => v.toFixed(0))}  до края дороги ${maxPt.toFixed(1)}`);
     if (m.id === 'castle' && !l.spotsList) console.log('     ', JSON.stringify(spots));

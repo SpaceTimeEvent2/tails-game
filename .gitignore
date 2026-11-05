@@ -14,3 +14,4 @@ keystore.properties
 # готовые ролики и обработанный голос собираются скриптами tools/howto-*; в git только исходные реплики
 store/video/*
 !store/video/vo-raw/
+!store/video/ad-raw/

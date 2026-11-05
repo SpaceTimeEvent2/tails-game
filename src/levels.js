@@ -69,58 +69,58 @@ export function makeSpots(path, limit = 12, maxR = 43) {
  */
 export const LEVELS = [
   {
-    id: 1, hpK: 7.87, teamHp: [1.6, 1.65, 2.67], name: 'Топла', hint: 'Первая набережная. Тени идут медленно — тут учимся.',
+    id: 1, hpK: 6.1, teamHp: [1.2, 1.3, 1.4], name: 'Топла', hint: 'Первая набережная. Тени идут медленно — тут учимся.',
     path: [[-38, -14], [-26, -14], [-20, -4], [-20, 8], [-8, 15], [6, 15], [13, 6], [13, -6], [22, -13], [33, -13], [37, -4], [37, 6]],
     enemy: 'dancer', friends: ['mila', 'teya'], shells: 130, target: 8, speed: 0.9,
     sky: 0x8fd4e8, sea: 0x1f7fa8, land: 0x86a86a,
   },
   {
-    id: 2, hpK: 6.16, teamHp: [1.51, 1.79, 1.97], name: 'Игало', hint: 'Длинная дуга у воды: тени успевают разогнаться.',
+    id: 2, hpK: 5.79, teamHp: [1.49, 1.77, 2.07], name: 'Игало', hint: 'Длинная дуга у воды: тени успевают разогнаться.',
     path: [[-40, 6], [-28, 12], [-14, 14], [0, 10], [10, 2], [16, -8], [26, -14], [38, -12]],
     enemy: 'dancer', friends: ['mila', 'teya', 'niksha'], shells: 140, target: 10, speed: 1,
     sky: 0x9fdcea, sea: 0x1d86ad, land: 0x8fae6f,
   },
   {
-    id: 3, hpK: 10.75, teamHp: [1.67, 3.98, 2.64], name: 'Савина', hint: 'Кипарисы и повороты — стреляй из-за угла.',
+    id: 3, hpK: 10.29, teamHp: [2.16, 2.1, 2.12], name: 'Савина', hint: 'Кипарисы и повороты — стреляй из-за угла.',
     path: zig(4, 20, -22, 10), enemy: 'dancer', friends: ['mila', 'teya', 'niksha'],
     shells: 150, target: 12, speed: 1.05, sky: 0x93d3df, sea: 0x1b7796, land: 0x7fa063,
   },
   {
-    id: 4, hpK: 11.55, teamHp: [2.24, 3.98, 3.98], name: 'Шкверская лестница', hint: 'Тысяча ступенек вниз. Здесь появляются новые тени.',
+    id: 4, hpK: 11.55, teamHp: [1.67, 3.09, 3.82], name: 'Шкверская лестница', hint: 'Тысяча ступенек вниз. Здесь появляются новые тени.',
     path: zig(6, 24, -30, 9), enemy: 'maskot', friends: ['mila', 'teya', 'niksha', 'iva'],
     shells: 170, target: 12, speed: 1.1, sky: 0x8ecbd8, sea: 0x1a6f8e, land: 0x86a86a,
   },
   {
-    id: 5, hpK: 4.36, teamHp: [2.04, 3.5, 3.98], name: 'Пет Даница', hint: 'Семь километров вдоль моря — самая длинная дорога.',
+    id: 5, hpK: 4.36, teamHp: [1.54, 2.53, 3.48], name: 'Пет Даница', hint: 'Семь километров вдоль моря — самая длинная дорога.',
     path: [[-42, -18], [-30, -14], [-30, -2], [-16, 2], [-16, 16], [-2, 20], [8, 14], [8, 0], [20, -4], [20, -18], [32, -20], [40, -12], [40, 4]],
     enemy: 'maskot', friends: ['mila', 'teya', 'niksha', 'iva'], shells: 180, target: 14, speed: 1.15,
     sky: 0x9adbe6, sea: 0x1f7fa8, land: 0x8cae6c,
   },
   {
-    id: 6, hpK: 7.05, teamHp: [1.79, 3.98, 2.87], name: 'Стари град', hint: 'Улочки закручиваются к площади Белависта.',
+    id: 6, hpK: 7.05, teamHp: [1.62, 3.4, 3.82], name: 'Стари град', hint: 'Улочки закручиваются к площади Белависта.',
     path: spiral(3, 38, 1.4), enemy: 'maskot', friends: ['mila', 'teya', 'niksha', 'iva', 'maskot'],
     shells: 200, target: 15, speed: 1.15, sky: 0xa9d8dd, sea: 0x1c7591, land: 0x9aa878,
   },
   {
-    id: 7, hpK: 3.74, teamHp: [1.9, 3.18, 3.88], name: 'Белависта', hint: 'Площадь с часами: тени идут широким кругом.',
+    id: 7, hpK: 3.74, teamHp: [1.49, 3.06, 4.14], name: 'Белависта', hint: 'Площадь с часами: тени идут широким кругом.',
     path: [...ring(34, Math.PI, -Math.PI * 0.2, 16), ...ring(16, -Math.PI * 0.2, Math.PI * 1.2, 14)],
     enemy: 'maskot', friends: ['mila', 'teya', 'niksha', 'iva', 'maskot'],
     shells: 210, target: 16, speed: 1.2, sky: 0x9ed2e2, sea: 0x1b7392, land: 0x93a875,
   },
   {
-    id: 8, hpK: 2.85, teamHp: [2.04, 3.3, 3.66], name: 'Форте-Маре', hint: 'Узкая стена над водой — плит мало, выбирай с умом.',
+    id: 8, hpK: 2.85, teamHp: [1.64, 1.54, 2.5], name: 'Форте-Маре', hint: 'Узкая стена над водой — плит мало, выбирай с умом.',
     path: [[-40, 14], [-24, 16], [-8, 12], [4, 4], [6, -8], [18, -16], [32, -14], [40, -2]],
     enemy: 'maskot', friends: ['teya', 'niksha', 'iva', 'maskot'], spots: 7,
     shells: 220, target: 16, speed: 1.25, sky: 0x8ec7d6, sea: 0x186a88, land: 0xa39a76,
   },
   {
-    id: 9, hpK: 2.23, teamHp: [3.22, 3.98, 3.98], name: 'Мамула', hint: 'Остров посреди Боки: тени обходят его по кругу.',
+    id: 9, hpK: 2.23, teamHp: [2.76, 3.6, 4.4], name: 'Мамула', hint: 'Остров посреди Боки: тени обходят его по кругу.',
     path: ring(30, Math.PI * 0.9, -Math.PI * 1.1, 24), enemy: 'maskot',
     friends: ['mila', 'teya', 'niksha', 'iva', 'maskot'], shells: 230, target: 18, speed: 1.3,
     sky: 0x86bfd2, sea: 0x14607e, land: 0x87a06a,
   },
   {
-    id: 10, hpK: 4.48, teamHp: [3.54, 3.98, 2.22], name: 'Канли-Кула', hint: 'Крепость на горе. Сюда идут самые быстрые тени.',
+    id: 10, hpK: 4.48, teamHp: [2.6, 3.4, 1.99], name: 'Канли-Кула', hint: 'Крепость на горе. Сюда идут самые быстрые тени.',
     path: zig(8, 26, -34, 8), enemy: 'maskot', friends: ['mila', 'teya', 'niksha', 'iva', 'maskot'],
     shells: 250, target: 20, speed: 1.4, sky: 0x7fb6cc, sea: 0x125777, land: 0x8d9a6a,
   },
@@ -190,7 +190,7 @@ export function castleSpots(path, n = 7, range = 16) {
  */
 export const CASTLE_LEVELS = [
   {
-    id: 1, hpK: 10.65, teamHp: [1.49, 3.98, 2.27], name: 'Ворота', hint: 'Построй замок и расти его: башня → стена → мост → крепость!',
+    id: 1, hpK: 9.2, teamHp: [1.44, 2.48, 1.77], name: 'Ворота', hint: 'Построй замок и расти его: башня → стена → мост → крепость!',
     speech: 'Уровень Замок. Ставь башню на плиту и расти её!',
     path: [[-40, -20], [-16, -20], [-16, -6], [16, -6], [16, 8], [-12, 8], [-12, 22], [40, 22]],
     spotsList: [[-28, -11], [0, -13], [26, -14], [0, 1], [-26, 6], [28, 14], [6, 15]],
@@ -198,98 +198,41 @@ export const CASTLE_LEVELS = [
     sky: 0x9fd2e6, sea: 0x1d7aa0, land: 0x8fae6f,
   },
   {
-    id: 2, hpK: 9.34, teamHp: [1.71, 2.24, 3.98], name: 'Ров', hint: 'Тени обходят ров. Замок у поворота бьёт по двум дорожкам сразу.',
+    id: 2, hpK: 9, teamHp: [1.51, 1.1, 1.48], name: 'Ров', hint: 'Тени обходят ров. Замок у поворота бьёт по двум дорожкам сразу.',
     path: [[-40, -26], [-22, -26], [-22, 2], [2, 2], [2, -24], [24, -24], [24, 26], [36, 26]],
     spots: 7, enemy: 'dancer', friends: ['castle'], shells: 150, target: 10, speed: 1.0, ghosts: 0.35,
     sky: 0x9ccde0, sea: 0x1b7396, land: 0x86a86a,
   },
   {
-    id: 3, hpK: 6.2, teamHp: [1.45, 2.52, 1.05], name: 'Подъёмный мост', hint: 'Длинный прямой мост — тени бегут быстро. Расти замки повыше!',
+    id: 3, hpK: 5.99, teamHp: [1.23, 2.77, 1.27], name: 'Подъёмный мост', hint: 'Длинный прямой мост — тени бегут быстро. Расти замки повыше!',
     path: [[-40, 0], [-26, 0], [-26, -26], [0, -26], [0, 26], [26, 26], [26, 0], [40, 0]],
     spots: 7, enemy: 'dancer', friends: ['castle'], shells: 160, target: 12, speed: 1.1, ghosts: 0.4,
     sky: 0x95c6dc, sea: 0x186d90, land: 0x8aa66c,
   },
   {
-    id: 4, hpK: 6.94, teamHp: [1.29, 1.23, 1.97], name: 'Двор с колодцем', hint: 'Дорожка закручивается к колодцу. Привидений всё больше!',
+    id: 4, hpK: 6.94, teamHp: [1.29, 1.3, 1.75], name: 'Двор с колодцем', hint: 'Дорожка закручивается к колодцу. Привидений всё больше!',
     path: [[-34, -30], [28, -30], [28, 26], [-26, 26], [-26, -10], [12, -10], [12, 10], [-8, 10]],
     spots: 8, enemy: 'maskot', friends: ['castle'], shells: 180, target: 14, speed: 1.15, ghosts: 0.45,
     sky: 0x8fbfd6, sea: 0x166689, land: 0x93a875,
   },
   {
-    id: 5, hpK: 5.49, teamHp: [1.45, 1.86, 2.14], name: 'Тронный зал', hint: 'Последний зал: тени быстрые, привидения — через одно. Держись!',
+    id: 5, hpK: 5.49, teamHp: [1.48, 3.4, 1.78], name: 'Тронный зал', hint: 'Последний зал: тени быстрые, привидения — через одно. Держись!',
     path: [[-38, -26], [-12, -26], [-12, -12], [-34, -12], [-34, 4], [-4, 4], [-4, -18], [24, -18], [24, 14], [-18, 14], [-18, 30], [30, 30]],
     spots: 8, enemy: 'maskot', friends: ['castle'], shells: 200, target: 16, speed: 1.25, ghosts: 0.5,
     sky: 0x86b4cc, sea: 0x135d7e, land: 0x8d9a6a,
   },
 ];
 
-/* ─────────────────── карта «Бока»: классические схемы башенной защиты ─────────────────── */
+/* ─────────────────── карты ─────────────────── */
 
-/** Квадратная спираль внутрь: от края к центру. */
-const squareSpiral = (r0, step, turns) => {
-  const p = [[-r0, -r0]];
-  let r = r0;
-  for (let i = 0; i < turns * 4; i++) {
-    const [x, z] = p[p.length - 1];
-    const dir = i % 4;
-    if (dir === 0) p.push([r, z]);
-    if (dir === 1) p.push([x, r]);
-    if (dir === 2) p.push([-r + step, z]);
-    if (dir === 3) { r -= step; p.push([x, -r]); }
-  }
-  return p;
-};
-
-/**
- * Пять схем, знакомых по старым картам «защиты башнями»: открытое поле с лабиринтом, спираль,
- * две и четыре дорожки, кольцо. Названия, раскладки и графика — свои, из мира Боки.
- */
-export const BOKA_LEVELS = [
+/** Экспериментальная карта: только в экспериментальной сборке, при создании можно включить friendly fire. */
+export const LAB_LEVELS = [
   {
-    id: 1, hpK: 4.16, teamHp: [1.54, 2.11, 3.42], name: 'Пьяцца', hint: 'Открытое поле: дороги нет! Ставь подружек где хочешь — тени обойдут их. Построй лабиринт, но не закрывай путь совсем.',
-    speech: 'Открытое поле. Построй лабиринт из подружек!',
-    maze: { w: 13, h: 11, spawns: [[0, 5]], house: [12, 5], rocks: [[6, 0], [6, 10]] },
-    enemy: 'dancer', friends: ['mila', 'teya', 'niksha', 'iva'], shells: 200, target: 10, speed: 0.95, ghosts: 0.25,
-    players: '1–4', sky: 0x9adbe6, sea: 0x1f7fa8, land: 0x9aa878,
-  },
-  {
-    id: 2, hpK: 6.81, teamHp: [1.71, 3.98, 3.98], name: 'Улитка', hint: 'Спираль к колодцу: тени идут кругами, а подружки в середине бьют по всем виткам.',
-    path: squareSpiral(36, 12, 2), enemy: 'dancer', friends: ['mila', 'teya', 'niksha', 'iva'],
-    shells: 170, target: 12, speed: 1.05, ghosts: 0.3, players: '1–4',
-    sky: 0x9fd2e6, sea: 0x1b7796, land: 0x86a86a,
-  },
-  {
-    id: 3, hpK: 5.26, teamHp: [1.45, 1.82, 2.49], name: 'Два причала', hint: 'Две дорожки от двух причалов к одному домику — вдвоём каждый держит свою!',
-    paths: [
-      [[-40, -30], [-10, -30], [-10, -14], [20, -14], [20, 0], [36, 0]],
-      [[-40, 30], [-10, 30], [-10, 14], [20, 14], [20, 0], [36, 0]],
-    ],
-    house: [41, 0], laneK: 1.3, enemy: 'dancer', friends: ['mila', 'teya', 'niksha', 'iva'],
-    shells: 180, target: 12, speed: 1.05, ghosts: 0.3, players: '2', spots: 14,
-    sky: 0x96cfe2, sea: 0x1a7396, land: 0x8cae6c,
-  },
-  {
-    id: 4, hpK: 4.04, teamHp: [1.52, 2.4, 2.77], name: 'Четыре ветра', hint: 'Четыре дорожки с четырёх сторон к домику в центре. Для четверых: у каждого своя!',
-    paths: [
-      [[-40, -40], [-40, -14], [-14, -14], [-14, -4], [-4, -4]],
-      [[40, -40], [14, -40], [14, -14], [4, -14], [4, -4]],
-      [[40, 40], [40, 14], [14, 14], [14, 4], [4, 4]],
-      [[-40, 40], [-14, 40], [-14, 14], [-4, 14], [-4, 4]],
-    ],
-    house: [0, 0], laneK: 1.0, enemy: 'maskot', friends: ['mila', 'teya', 'niksha', 'iva', 'maskot'],
-    shells: 500, target: 14, speed: 1.1, ghosts: 0.35, players: '4', spots: 16,
-    sky: 0x8fc6da, sea: 0x186d90, land: 0x93a875,
-  },
-  {
-    id: 5, hpK: 5.1, teamHp: [2.38, 3.04, 3.88], name: 'Кольцо Мамулы', hint: 'Тени обходят остров по большому кольцу и только потом идут к домику.',
-    path: [...ring(38, Math.PI, Math.PI * 2.9, 30), ...ring(20, Math.PI * 2.9, Math.PI * 4.6, 18).slice(1), [0, 8]],
-    house: [0, 0], enemy: 'maskot', friends: ['mila', 'teya', 'niksha', 'iva', 'maskot'],
-    shells: 220, target: 16, speed: 1.2, ghosts: 0.35, players: '1–4',
-    sky: 0x86bfd2, sea: 0x14607e, land: 0x87a06a,
+    id: 1, hpK: 5.2, teamHp: [1.4, 1.8, 2.2], name: 'Арена', hint: 'Круг у домика: тени идут вокруг, а союзник рядом. Поделишься ракушками или отберёшь?',
+    path: ring(30, Math.PI * 0.9, -Math.PI * 1.1, 24), house: [0, 0], enemy: 'dancer', friends: ['mila', 'teya', 'niksha', 'iva', 'castle'],
+    shells: 200, target: 12, speed: 1, ghosts: 0.35, players: '2–4', spots: 12, sky: 0xb7a6e8, sea: 0x3b2a7a, land: 0x8f8fb0,
   },
 ];
-
-/* ─────────────────── карты ─────────────────── */
 
 export const MAPS = {
   quay: {
@@ -301,10 +244,10 @@ export const MAPS = {
     about: 'Пять залов замка: строй башни и расти их до настоящей крепости. Тут водятся привидения!',
     levels: CASTLE_LEVELS,
   },
-  boka: {
-    id: 'boka', name: 'Бока', emoji: '⚓', preview: 'assets/preview-boka.jpg',
-    about: 'Пять разных схем: открытое поле-лабиринт, спираль, две и четыре дорожки, кольцо. Отлично для командной игры!',
-    levels: BOKA_LEVELS,
+  lab: {
+    id: 'lab', name: 'Эксперимент', emoji: '🧪', preview: 'assets/preview-boka.jpg', hidden: true,
+    about: 'Арена для опытов: можно включить friendly fire.',
+    levels: LAB_LEVELS,
   },
 };
 for (const m of Object.values(MAPS)) for (const l of m.levels) l.map = m.id;
@@ -350,6 +293,9 @@ export const houseOf = (level) => {
 
 /** Все дорожки уровня (для лабиринта — пусто: маршрут считается на лету). */
 export const pathsOf = (level) => (level.maze ? [] : level.paths || [level.path]);
+
+/** В командной игре замок можно строить на любой карте. */
+export const teamLevel = (level) => (level.friends.includes('castle') ? level : { ...level, friends: [...level.friends, 'castle'] });
 
 /** Уровень любой карты, включая свои (map=custom, code=…). */
 export function resolveLevel(mapId, id, code) {

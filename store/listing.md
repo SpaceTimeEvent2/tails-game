@@ -11,10 +11,9 @@ Tails: Castle Tower Defense is a bright cartoon tower defense (TD) strategy game
 ★ CO-OP TOWER DEFENSE
 Create a team game and share the room code, or join an open game from the list. Each player has their own shells and defenders — defend one house together.
 
-★ 3 MAPS, 20 LEVELS
+★ 2 MAPS, 15 LEVELS — AND YOUR OWN
 • The Quay — 10 seaside levels from easy to tricky.
 • The Castle — 5 halls where your tower grows into a real fortress.
-• Boka Bay — open-field maze, spiral, two and four paths: made for team play.
 
 ★ BUILD AND UPGRADE
 Grow your castles stage by stage, choose where to spend your shells and earn up to 3 stars on every level.
@@ -38,10 +37,9 @@ A game by Alisa and Victor Kiselev (SPACECODE). Ideas and questions: hexneo36@gm
 ★ КОМАНДНАЯ ИГРА
 Создай игру и поделись кодом комнаты или зайди в открытую игру из списка. У каждого свои ракушки и защитники — защищайте один домик вместе.
 
-★ 3 КАРТЫ, 20 УРОВНЕЙ
+★ 2 КАРТЫ, 15 УРОВНЕЙ И ТВОИ СОБСТВЕННЫЕ
 • Набережная — 10 уровней у моря, от простых к хитрым.
 • Замок — 5 залов, где башня вырастает в настоящую крепость.
-• Бока — открытое поле-лабиринт, спираль, две и четыре дорожки: для командной игры.
 
 ★ СТРОЙ И УЛУЧШАЙ
 Расти замки по стадиям, решай, на что потратить ракушки, и собирай до 3 звёзд на каждом уровне.

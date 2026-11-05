@@ -69,6 +69,20 @@ a.lvl:hover::before { opacity: .75; transform: scale(1.06); }
 .lvl .meta { font-size: clamp(11px, 2.2vh, 14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lvl .off { color: #ffffff33; }
 
+/* свои уровни */
+.choice.mine { justify-content: center; align-items: center; text-align: center; gap: 2px; background: linear-gradient(160deg, #6a4bc9, #2b1e63); }
+.choice.mine .name, .choice.mine .about, .choice.mine .meta { padding-left: 8px; padding-right: 8px; }
+.levels.scroll { overflow-y: auto; grid-auto-rows: minmax(clamp(96px, 30vh, 190px), 1fr); align-content: start; scrollbar-width: thin; }
+.lvl.mine-lvl { justify-content: space-between; }
+.lvl.mine-lvl .fill { position: absolute; inset: 0; z-index: 2; border-radius: inherit; }
+.lvl.mine-lvl:hover { border-color: var(--mimosa); }
+.lvl.mine-lvl .edit { position: absolute; z-index: 3; top: 6px; right: 6px; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: #06192bdd; border: 1px solid #ffffff44; font-size: 20px; text-decoration: none; color: #fff; padding: 0; cursor: pointer; }
+.lvl.mine-lvl .name { padding-right: 46px; }
+.lvl.mine-lvl::before { opacity: .8; }
+.lvl.add { align-items: center; justify-content: center; text-align: center; background: #ffffff0c; border-style: dashed; }
+.lvl.add::before, .lvl.add::after { display: none; }
+.lvl.add .plus { font-size: clamp(30px, 10vh, 56px); line-height: 1; color: var(--mimosa); }
+
 /* лобби */
 .lobby-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(8px, 1.2vw, 16px); min-height: 0; }
 .stack { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: clamp(8px, 1.2vw, 16px); min-height: 0; }

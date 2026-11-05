@@ -34,6 +34,7 @@
 </main>
 <script type="module">
 import { MAPS, progress } from './src/levels.js';
+import { myLevels } from './src/custom.js';
 import { me } from './src/net.js';
 const prof = me();
 const meEl = document.getElementById('me');
@@ -41,7 +42,7 @@ meEl.textContent = `${prof.emoji} ${prof.name || 'Мой персонаж'}`;
 meEl.style.setProperty('--c', prof.color);
 let last = 'quay';
 try { last = localStorage.getItem('tails.choice') || 'quay'; } catch (e) { /* */ }
-document.getElementById('maps').innerHTML = Object.values(MAPS).map((m) => {
+document.getElementById('maps').innerHTML = Object.values(MAPS).filter((m) => !m.hidden).map((m) => {
   const stars = progress.totalStars(m.id), max = m.levels.length * 3;
   return `<a class="choice${m.id === last ? ' last' : ''}" href="map.html?map=${m.id}" data-map="${m.id}">
     ${m.id === last ? '<span class="badge">в прошлый раз</span>' : ''}
@@ -50,7 +51,13 @@ document.getElementById('maps').innerHTML = Object.values(MAPS).map((m) => {
     <span class="about">${m.about}</span>
     <span class="meta">${m.levels.length} уровней · ⭐ ${stars} из ${max}</span>
   </a>`;
-}).join('');
+}).join('') + (() => {
+  const n = myLevels.list().length;
+  return `<a class="choice mine${last === 'custom' ? ' last' : ''}" href="map.html?map=custom" id="c-mine">
+    <span class="big-emoji">🛠</span><span class="name">Мои уровни</span>
+    <span class="about">${n ? 'Твои карты: играй и правь их' : 'Создай первую карту, и она появится здесь'}</span>
+    <span class="meta">${n ? `Сохранено: ${n}` : 'Пока пусто'}</span></a>`;
+})();
 </script>
 </body>
 </html>

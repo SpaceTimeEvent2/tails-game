@@ -8,7 +8,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { touchCamera } from './touch-camera.js';
-import { EW, EH, DIFFS, THEMES, GHOSTS, PICK_FRIENDS, DEFAULT_FRIENDS, analyze, encode, decode, sampleDesign, emptyCells, myLevels } from './custom.js';
+import { EW, EH, DIFFS, THEMES, GHOSTS, PICK_FRIENDS, DEFAULT_FRIENDS, analyze, encode, decode, sampleDesign, emptyCells, myLevels, isMine, authorId, authorName, copyDesign } from './custom.js';
 import { Grid } from './grid.js';
 import { Runner, Joystick, loadRunnerModel } from './runner.js';
 import { me } from './net.js';
@@ -17,11 +17,20 @@ import { FRIENDS } from './sim.js';
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const grid = new Grid(EW, EH);
+/** Телефон и планшет: поле целиком, один палец рисует, два — камера, настройки в выезжающей панели. */
+const TOUCH = matchMedia('(pointer: coarse)').matches || qs.has('touch');
+if (TOUCH) { document.body.classList.add('ed-touch'); document.body.classList.remove('runner-on'); }
 
 /* ── уровень в работе (черновик переживает перезагрузку) ── */
 let design = null;
 try { design = JSON.parse(localStorage.getItem('tg.editor.draft') || 'null'); } catch (e) { /* */ }
-if (qs.get('code')) design = decode(qs.get('code')) || design;
+if (qs.get('code')) { const d = decode(qs.get('code')); if (d) design = { ...d, author: d.author || 'unknown' }; }
+if (qs.get('edit')) {                  // открыли из меню «Мои уровни»
+  const it = myLevels.get(qs.get('edit'));
+  const d = it && decode(it.code);
+  if (d) design = { ...d, id: it.id };
+}
+if (qs.get('new')) design = { ...sampleDesign(), cells: emptyCells(), name: 'Новый уровень' };
 if (!design || !design.cells || design.cells.length !== EW * EH) design = sampleDesign();
 let cells = design.cells.split('');
 let picked = design.friends && design.friends.length ? design.friends.slice() : (THEMES[design.theme] || THEMES.quay).friends.slice();
@@ -43,6 +52,29 @@ controls.minDistance = 20;
 controls.maxDistance = 140;
 const touchCam = touchCamera(canvas, camera, controls, { left: $('spin-left'), right: $('spin-right') });
 camera.position.set(0, 70, 66);
+if (TOUCH) controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
+/** Камера почти сверху, ровно на такой высоте, чтобы всё поле поместилось в холст. */
+function fitView() {
+  const c = canvas.clientWidth / canvas.clientHeight;
+  camera.aspect = c;
+  camera.updateProjectionMatrix();
+  const hx = (EW * 6) / 2 + 3, hz = (EH * 6) / 2 + 3, tilt = 0.32, v = new THREE.Vector3();
+  const fits = (d) => {
+    camera.position.set(0, d * Math.cos(tilt), d * Math.sin(tilt));
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      v.set(sx * hx, 0, sz * hz).project(camera);
+      if (Math.abs(v.x) > 0.98 || Math.abs(v.y) > 0.98) return false;
+    }
+    return true;
+  };
+  let lo = 20, hi = 600;
+  for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
+  fits(hi);
+  controls.target.set(0, 0, 0);
+  controls.maxDistance = hi * 1.3;
+}
 scene.add(new THREE.HemisphereLight(0xdff4ff, 0x6f8a63, 1.1));
 const sun = new THREE.DirectionalLight(0xfff4d8, 2.2);
 sun.position.set(20, 40, 16);
@@ -144,14 +176,37 @@ scene.add(cursor);
 let tool = 'road';
 const TOOLS = { road: '#', spot: 'o', spawn: 'S', house: 'H', erase: '.' };
 const NAMES = { '#': 'дорога', o: 'плита', S: 'старт', H: 'домик' };
-$('tools').onclick = (e) => { const b = e.target.closest('button'); if (b) setTool(b.dataset.tool); };
+$('tools').onclick = (e) => { const b = e.target.closest('button'); if (b && b.dataset.tool) setTool(b.dataset.tool); };
 function setTool(t) {
   tool = t;
   for (const b of $('tools').querySelectorAll('button')) b.classList.toggle('on', b.dataset.tool === t);
 }
 
+/* шаг назад: снимки клеток перед каждым нажатием или мазком */
+const undo = [];
+function snap() {
+  const s = cells.join('');
+  if (undo[undo.length - 1] !== s) undo.push(s);
+  if (undo.length > 100) undo.shift();
+  $('btn-undo').disabled = false;
+}
+function restore(s) {
+  const was = cells;
+  cells = s.split('');
+  for (let k = 0; k < cells.length; k++) if (cells[k] !== was[k]) redrawCell(k);
+  changed();
+}
+$('btn-undo').onclick = () => {
+  if (readOnly) return;
+  if (undo[undo.length - 1] === cells.join('')) undo.pop();
+  if (undo.length) restore(undo.pop());
+  $('btn-undo').disabled = !undo.length;
+};
+
 function apply(k, how = tool) {
   if (k < 0) return;
+  if (readOnly) { toast('Это чужой уровень. Нажми «Копировать» и правь свою копию'); return; }
+  snap();
   const ch = TOOLS[how];
   if (how === 'house') for (let i = 0; i < cells.length; i++) if (cells[i] === 'H' && i !== k) { cells[i] = '#'; redrawCell(i); }
   if (how === 'spawn' && cells[k] !== 'S') {
@@ -168,7 +223,8 @@ function apply(k, how = tool) {
 
 /* ── проверка, сохранение, код ── */
 function current() {
-  return { ...design, name: $('name').value.trim() || 'Мой уровень', cells: cells.join(''), friends: picked.slice(), ghosts: ghostMode,
+  if (readOnly) return design;
+  return { ...design, author: design.author || authorId(), authorName: design.authorName || authorName(), name: $('name').value.trim() || 'Мой уровень', cells: cells.join(''), friends: picked.slice(), ghosts: ghostMode,
            target: Math.max(3, Math.min(25, Number($('target').value) || 8)), diff: $('diff').value, theme: $('theme').value };
 }
 let lastA = null;
@@ -194,7 +250,10 @@ function changed() {
   st.innerHTML = a.ok
     ? `✅ Можно играть! Дорожек: ${a.paths.length}, плит: ${a.spots.length}, можно строить: ${picked.map((id) => FRIENDS[id].emoji).join('')}${ghostMode === 'none' ? '' : ' · 👻'}.`
     : a.errors.map((e) => `• ${e}`).join('<br>');
-  for (const id of ['btn-play', 'btn-team', 'btn-save']) $(id).disabled = !a.ok;
+  for (const id of ['btn-play', 'btn-team', 'btn-save', 'r-play']) $(id).disabled = !a.ok;
+  $('r-save').disabled = !a.ok && !readOnly;
+  $('st-mini').className = a.ok ? 'ok' : '';
+  $('st-mini').textContent = a.ok ? `✅ Можно играть! Дорожек: ${a.paths.length}, плит: ${a.spots.length}` : `⚠️ ${a.errors[0]}`;
 }
 
 $('diff').innerHTML = Object.entries(DIFFS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
@@ -220,8 +279,28 @@ $('friends').onclick = (e) => {
 drawPick();
 function redrawAll() { for (let k = 0; k < EW * EH; k++) redrawCell(k); }
 
+/** Чужой уровень только для просмотра и игры; менять можно свою копию. */
+let readOnly = false;
+function setReadOnly() {
+  readOnly = !isMine(design);
+  $('foreign').hidden = !readOnly;
+  if (readOnly) $('foreign').textContent = `🔒 Уровень игрока ${design.authorName || 'без имени'}. Менять можно только свою копию.`;
+  $('btn-copy').hidden = !readOnly;
+  $('btn-save').hidden = readOnly;
+  for (const id of ['name', 'target', 'diff', 'theme', 'ghosts']) $(id).disabled = readOnly;
+  $('friends').classList.toggle('off', readOnly);
+  $('r-save').innerHTML = readOnly ? '📄<b>Копировать</b>' : '💾<b>Сохранить</b>';
+  $('r-save').disabled = !readOnly && !(lastA && lastA.ok);
+}
+$('btn-copy').onclick = () => {
+  const item = myLevels.copyOf(design);
+  load({ ...decode(item.code), id: item.id });
+  renderMine();
+  toast(`📄 Теперь это твоя копия: ${item.name}`);
+};
+
 function save() {
-  if (!lastA || !lastA.ok) { toast('Сначала почини уровень — смотри подсказку справа'); return null; }
+  if (!lastA || !lastA.ok) { toast('Сначала почини уровень — смотри подсказку'); return null; }
   const item = myLevels.save(current());
   design.id = item.id;
   changed();
@@ -230,20 +309,31 @@ function save() {
   return item;
 }
 $('btn-save').onclick = save;
-$('btn-play').onclick = () => { const it = save(); if (it) location.href = `play.html?my=${it.id}${qs.has('debug') ? '&debug' : ''}`; };
+$('btn-play').onclick = () => { const it = save(); if (it) location.href = `play.html?my=${it.id}&from=editor${qs.has('debug') ? '&debug' : ''}`; };
 $('btn-team').onclick = () => { const it = save(); if (it) location.href = `lobby.html?map=custom&code=${encodeURIComponent(it.code)}${qs.has('debug') ? '&debug' : ''}`; };
 $('btn-export').onclick = () => {
   const c = $('code');
   c.hidden = false;
   c.value = encode(current());
   c.select();
-  try { navigator.clipboard.writeText(c.value); toast('📋 Код скопирован — отправь его другу'); } catch (e) { toast('Код ниже — скопируй его'); }
+  const copied = () => toast('📋 Код скопирован — отправь его другу');
+  const manual = () => { try { if (document.execCommand('copy')) { copied(); return; } } catch (e) { /* */ } toast('Код в поле — скопируй его'); };
+  if (navigator.clipboard) navigator.clipboard.writeText(c.value).then(copied, manual); else manual();
 };
 $('btn-import').onclick = () => {
   const c = $('code');
   if (c.hidden || !c.value.trim()) { c.hidden = false; c.value = ''; c.focus(); toast('Вставь код в поле и нажми ещё раз'); return; }
   const d = decode(c.value);
   if (!d) { toast('Код не подходит'); return; }
+  // код без автора — старый или чужой: считаем чужим
+  if (!d.author) d.author = 'unknown';
+  if (!isMine(d)) {
+    const it = myLevels.save(d);
+    load({ ...d, id: it.id });
+    renderMine();
+    toast(`📥 Чужой уровень «${d.name}» в твоём списке. Чтобы менять, нажми «Копировать»`, 4000);
+    return;
+  }
   load(d);
   toast(`📥 Загружен уровень «${d.name}»`);
 };
@@ -254,30 +344,47 @@ function load(d) {
   delete design.id;
   if (d.id) design.id = d.id;
   cells = d.cells.split('');
+  undo.length = 0;
+  $('btn-undo').disabled = true;
   picked = d.friends && d.friends.length ? d.friends.slice() : (THEMES[d.theme] || THEMES.quay).friends.slice();
   ghostMode = GHOSTS[d.ghosts] ? d.ghosts : d.theme === 'castle' ? 'many' : 'few';
   $('ghosts').value = ghostMode;
   drawPick();
   redrawAll();
   $('name').value = d.name; $('target').value = d.target; $('diff').value = d.diff; $('theme').value = d.theme;
+  setReadOnly();
   changed();
 }
 
+/* панель справа на телефоне */
+const drawer = (open) => { $('side').classList.toggle('open', open); $('scrim').classList.toggle('open', open); };
+$('r-more').onclick = () => drawer(true);
+$('side-close').onclick = () => drawer(false);
+$('scrim').onclick = () => drawer(false);
+$('r-fit').onclick = fitView;
+$('r-play').onclick = () => $('btn-play').click();
+$('r-save').onclick = () => (readOnly ? $('btn-copy').click() : save());
+
 function renderMine() {
   const list = myLevels.list();
-  $('mine').innerHTML = list.length ? list.map((x) => `<div class="it" data-id="${x.id}"><span>${x.name.replace(/[<>&]/g, '')}</span>
-    <button data-a="play" title="Играть">▶</button><button data-a="edit" title="Открыть">✏️</button><button data-a="del" title="Удалить">🗑</button></div>`).join('')
+  $('mine').innerHTML = list.length ? list.map((x) => {
+    const d = decode(x.code), mine = !d || isMine(d);
+    return `<div class="it" data-id="${x.id}"><span>${mine ? '' : '🔒 '}${x.name.replace(/[<>&]/g, '')}</span>
+    <button data-a="play" title="Играть">▶</button><button data-a="edit" title="${mine ? 'Открыть' : 'Посмотреть'}">${mine ? '✏️' : '👁'}</button>${mine ? '' : '<button data-a="copy" title="Скопировать себе">📄</button>'}<button data-a="del" title="Удалить">🗑</button></div>`;
+  }).join('')
     : '<div style="color:#9fc0d0;font-size:14px">Пока пусто. Нарисуй уровень и нажми «Сохранить».</div>';
 }
 $('mine').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   const id = b.closest('.it').dataset.id;
   const it = myLevels.get(id);
-  if (b.dataset.a === 'play') location.href = `play.html?my=${id}`;
+  if (b.dataset.a === 'play') location.href = `play.html?my=${id}&from=editor`;
   if (b.dataset.a === 'edit' && it) { load({ ...decode(it.code), id }); toast(`Открыт «${it.name}»`); }
+  if (b.dataset.a === 'copy' && it) { const c = myLevels.copyOf(decode(it.code)); load({ ...decode(c.code), id: c.id }); renderMine(); toast(`📄 Теперь это твоя копия: ${c.name}`); }
   if (b.dataset.a === 'del') { myLevels.remove(id); renderMine(); }
 };
 renderMine();
+setReadOnly();
 
 function toast(text, ms = 2200) {
   const el = $('toast');
@@ -309,15 +416,71 @@ $('btn-jump').onclick = () => runner && runner.jump();
 
 // клик/тап по клетке — тоже ставит (персонаж прибегает туда)
 const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
-canvas.addEventListener('pointerup', (e) => {
-  if (!touchCam.isTap(e)) return;
+const cellUnder = (e) => {
   const r = canvas.getBoundingClientRect();
   mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(mouse, camera);
   const hit = ray.intersectObjects(tiles)[0];
-  if (hit) { const k = hit.object.userData.k; goTo = k; apply(k); }
+  return hit ? hit.object.userData.k : -1;
+};
+canvas.addEventListener('pointerup', (e) => {
+  if (!touchCam.isTap(e)) return;
+  const k = cellUnder(e);
+  if (k >= 0) { goTo = k; apply(k); }
 });
 let goTo = -1;
+
+/* мазок одним пальцем: дорога ложится только на пустые клетки, «Убрать» стирает всё; второй палец — это уже камера */
+let stroke = null, dirty = false;
+const DRAGGABLE = { road: '.', erase: null };
+function paintCell(k) {
+  const was = cells[k];
+  if (tool === 'road' ? was !== '.' : was === '.') return;
+  cells[k] = TOOLS[tool];
+  redrawCell(k);
+  goTo = k;
+  dirty = true;
+}
+function paintLine(a, b) {        // палец быстрый: клетки между двумя событиями не должны пропадать
+  const [ai, aj] = [a % EW, Math.floor(a / EW)], [bi, bj] = [b % EW, Math.floor(b / EW)];
+  const n = Math.max(Math.abs(bi - ai), Math.abs(bj - aj));
+  let i = ai, j = aj;
+  for (let s = 1; s <= n; s++) {
+    const ni = Math.round(ai + ((bi - ai) * s) / n), nj = Math.round(aj + ((bj - aj) * s) / n);
+    if (ni !== i && nj !== j) paintCell(j * EW + ni);      // без диагоналей: по ним дорога не считается связной
+    i = ni; j = nj;
+    paintCell(j * EW + i);
+  }
+}
+if (TOUCH) {
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    if (stroke) {
+      if (stroke.painted && performance.now() - stroke.t < 350) restore(stroke.before);   // это начинался щипок, а не мазок
+      stroke = null;
+      return;
+    }
+    stroke = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), last: -1, painted: false, before: cells.join('') };
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!stroke || e.pointerId !== stroke.id || !(tool in DRAGGABLE) || readOnly) return;
+    if (!stroke.painted) {
+      if (Math.hypot(e.clientX - stroke.x, e.clientY - stroke.y) < 12) return;
+      const k0 = cellUnder({ clientX: stroke.x, clientY: stroke.y });
+      stroke.painted = true;
+      stroke.t = performance.now();
+      snap();
+      if (k0 >= 0) { paintCell(k0); stroke.last = k0; }
+    }
+    const k = cellUnder(e);
+    if (k < 0 || k === stroke.last) return;
+    if (stroke.last >= 0) paintLine(stroke.last, k); else paintCell(k);
+    stroke.last = k;
+  });
+  const endStroke = (e) => { if (stroke && e.pointerId === stroke.id) setTimeout(() => { stroke = null; }, 0); };
+  addEventListener('pointerup', endStroke);
+  addEventListener('pointercancel', endStroke);
+}
 
 const fwd = new THREE.Vector3(), right = new THREE.Vector3(), dir = new THREE.Vector3();
 const clock = new THREE.Clock();
@@ -325,6 +488,7 @@ const HALF_W = (EW * 6) / 2 + 2, HALF_H = (EH * 6) / 2 + 2;
 function tick() {
   requestAnimationFrame(tick);
   const dt = Math.min(clock.getDelta(), 0.1);
+  if (dirty) { dirty = false; changed(); }
   if (runner) {
     let ix = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
     let iy = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
@@ -350,17 +514,20 @@ function tick() {
     const k = runnerCell();
     cursor.visible = k >= 0;
     if (k >= 0) { const [x, z] = grid.center(k); cursor.position.x = x; cursor.position.z = z; }
-    // камера мягко следует за персонажем
+    // камера мягко следует за персонажем (на телефоне поле рисуют пальцем, и оно не должно уезжать)
+    if (!TOUCH) {
     const tx = controls.target.x + (p.x * 0.6 - controls.target.x) * Math.min(1, dt * 2);
     const tz = controls.target.z + (p.z * 0.6 - controls.target.z) * Math.min(1, dt * 2);
     camera.position.x += tx - controls.target.x; camera.position.z += tz - controls.target.z;
     controls.target.x = tx; controls.target.z = tz;
+    }
   }
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio())) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    if (TOUCH) fitView();
   }
   controls.update();
   renderer.render(scene, camera);
@@ -378,5 +545,6 @@ runner = new Runner(scene, { color: prof.color, name: '', me: true, hero: prof.h
 runner.root.position.set(0, 0, 9);
 changed();
 tick();
-toast('Бегай (WASD / стрелки / джойстик) и жми «Поставить» (E). Можно просто тыкать по клеткам.', 6000);
-if (qs.has('debug')) window.__ed = { get cells() { return cells; }, apply, setTool, runner, keys, grid, current, save, changed, get lastA() { return lastA; }, camera, renderer };
+toast(TOUCH ? 'Выбери слева, что ставить, и рисуй пальцем. Двумя пальцами можно приблизить поле.'
+  : 'Бегай (WASD / стрелки / джойстик) и жми «Поставить» (E). Можно просто тыкать по клеткам.', 6000);
+if (qs.has('debug')) window.__ed = { TOUCH, fitView, controls, get cells() { return cells; }, apply, setTool, runner, keys, grid, current, save, changed, get lastA() { return lastA; }, camera, renderer };

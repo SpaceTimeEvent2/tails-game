@@ -66,3 +66,53 @@ body #toast { top: 128px; }
 
 #spin { right: auto; left: 14px; top: 96px; transform: none; }
 @media (max-height: 520px) { #spin { left: 8px; top: 8px; } }
+
+#foreign { padding: 6px 10px; border-radius: 12px; font-size: 13px; line-height: 1.3; background: #ffd44722; border: 1px solid var(--mimosa); }
+#friends.off { pointer-events: none; opacity: .6; }
+
+#btn-undo:disabled { opacity: .4; }
+#rail, #st-mini, #scrim, #side-close { display: none; }
+
+/* ── телефон и планшет: всё поле в экране, панели по краям, настройки выезжают отдельно ── */
+body.ed-touch { --left: calc(66px + env(safe-area-inset-left)); --right: calc(66px + env(safe-area-inset-right)); --top: 26px; --bottom: 0px; }
+body.ed-touch #scene { position: fixed; left: var(--left); top: var(--top); width: calc(100vw - var(--left) - var(--right)); height: calc(100dvh - var(--top) - var(--bottom)); }
+body.ed-touch #big-buttons, body.ed-touch #joy, body.ed-touch #spin { display: none; }
+body.ed-touch #tools, body.ed-touch #rail { position: fixed; z-index: 6; top: 0; bottom: 0; display: flex; flex-direction: column; gap: 3px; padding: 3px;
+  background: #06192bee; box-sizing: border-box; border: 0; border-radius: 0; transform: none; }
+body.ed-touch #tools { left: 0; right: auto; width: var(--left); padding-left: calc(3px + env(safe-area-inset-left)); }
+body.ed-touch #rail { right: 0; width: var(--right); padding-right: calc(3px + env(safe-area-inset-right)); }
+body.ed-touch #tools button, body.ed-touch #rail button, body.ed-touch #rail a { flex: 1 1 0; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  padding: 0; font-size: 20px; line-height: 1.1; border-radius: 10px; border: 2px solid transparent; background: #ffffff12; color: #fff; text-decoration: none; font-family: var(--font); touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+body.ed-touch #tools button b, body.ed-touch #rail button b, body.ed-touch #rail a b { font-size: 10px; font-weight: 600; white-space: nowrap; }
+body.ed-touch #tools button.on { border-color: var(--mimosa); background: #ffd4472a; }
+body.ed-touch #rail #r-play { background: linear-gradient(180deg, #ffe07a, var(--mimosa)); color: #3a2a00; }
+body.ed-touch #rail button:disabled { filter: grayscale(1); opacity: .45; }
+body.ed-touch #st-mini { display: block; position: fixed; z-index: 5; left: var(--left); right: var(--right); top: 0; height: 26px; padding: 0 10px; box-sizing: border-box;
+  font: 600 12px/26px var(--font); color: #fff; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #a92c17dd; }
+body.ed-touch #st-mini.ok { background: #2f7a3bdd; }
+body.ed-touch #side { top: 0; bottom: 0; left: auto; right: 0; height: auto; width: min(340px, 88vw); z-index: 11; display: block; overflow-y: auto; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding-right: calc(12px + env(safe-area-inset-right)); transform: translateX(105%); transition: transform .18s; font-size: 14px; }
+body.ed-touch #side.open { transform: none; }
+body.ed-touch #side > * { margin-bottom: 8px; }
+body.ed-touch #side .back { display: none; }
+body.ed-touch #side-close { display: block; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ffffff33; background: #ffffff14; color: #fff; font: 700 15px var(--font); }
+body.ed-touch #side input, body.ed-touch #side select { padding: 8px 10px; font-size: 16px; }
+body.ed-touch #side .field { font-size: 13px; gap: 3px; }
+body.ed-touch #side h3 { display: block; }
+body.ed-touch .pick button { padding: 5px 0; font-size: 20px; }
+body.ed-touch .pick button b { display: block; }
+body.ed-touch .btns { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+body.ed-touch .btns .btn { padding: 11px 4px; font-size: 14px; }
+body.ed-touch #status { max-height: none; font-size: 13px; padding: 6px 10px; }
+body.ed-touch #mine { overflow: visible; }
+body.ed-touch #mine .it button { padding: 8px 10px; }
+body.ed-touch #scrim.open { display: block; position: fixed; inset: 0; z-index: 10; background: #04121e88; }
+body.ed-touch #toast { left: calc((100vw + var(--left) - var(--right)) / 2); top: calc(var(--top) + 6px); max-width: 66vw; font-size: 13px; padding: 5px 12px; }
+/* телефон стоя (в браузере): панели сверху и снизу */
+@media (orientation: portrait) {
+  body.ed-touch { --left: 0px; --right: 0px; --top: 82px; --bottom: calc(64px + env(safe-area-inset-bottom)); }
+  body.ed-touch #tools, body.ed-touch #rail { flex-direction: row; width: auto; left: 0; right: 0; padding: 3px; }
+  body.ed-touch #tools { top: auto; bottom: 0; height: var(--bottom); padding-bottom: calc(3px + env(safe-area-inset-bottom)); }
+  body.ed-touch #rail { bottom: auto; height: 56px; }
+  body.ed-touch #st-mini { top: 56px; }
+}

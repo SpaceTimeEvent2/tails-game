@@ -20,23 +20,70 @@
 </main>
 <script type="module">
 import { mapById, progress } from './src/levels.js';
-const m = mapById(new URLSearchParams(location.search).get('map'));
-document.title = `Хвосты — ${m.name}`;
-document.getElementById('title').textContent = `${m.emoji} ${m.name}`;
-document.getElementById('about').textContent = m.about;
-const open = progress.unlocked(m.id);
-document.getElementById('levels').style.setProperty('--cols', m.levels.length > 6 ? 5 : m.levels.length);
-document.getElementById('levels').innerHTML = m.levels.map((l) => {
-  const ok = l.id <= open;
-  const st = progress.stars(m.id, l.id);
-  const stars = '⭐'.repeat(st) + '<span class="off">' + '★'.repeat(3 - st) + '</span>';
-  const inner = `<span class="num">${ok ? l.id : '🔒'}</span><span class="name">${ok ? l.name : l.name}</span>
-    <span class="about">${ok ? l.hint : 'откроется, когда пройдёшь предыдущий'}</span>
-    <span class="meta">${stars} · волн ${l.target}</span>`;
-  const bg = `style="--img:url('${m.preview}')"`;
-  return ok ? `<a class="lvl" ${bg} href="play.html?map=${m.id}&level=${l.id}" data-level="${l.id}">${inner}</a>`
-            : `<div class="lvl locked" ${bg}>${inner}</div>`;
-}).join('');
+import { myLevels, decode, isMine, EW, EH } from './src/custom.js';
+
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const mapId = new URLSearchParams(location.search).get('map');
+const grid = document.getElementById('levels');
+
+/** Маленькая картинка уровня из его клеток. */
+function miniMap(d) {
+  const color = { '#': '#e3d7c0', S: '#3a3550', H: '#d9663f', o: '#ffd447' };
+  let r = '';
+  for (let k = 0; k < d.cells.length; k++) {
+    const c = color[d.cells[k]];
+    if (c) r += `<rect x="${k % EW}" y="${Math.floor(k / EW)}" width="1" height="1" fill="${c}"/>`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${EW} ${EH}" preserveAspectRatio="xMidYMid slice"><rect width="${EW}" height="${EH}" fill="#8fae6f"/>${r}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+function showMine() {
+  document.title = 'Хвосты — мои уровни';
+  document.getElementById('title').textContent = '🛠 Мои уровни';
+  document.getElementById('about').textContent = 'Нажми, чтобы играть. ✏️ — править свой уровень, 📄 — скопировать чужой и править копию.';
+  const list = myLevels.list();
+  grid.classList.add('scroll');
+  grid.style.setProperty('--cols', Math.max(3, Math.min(5, list.length + 1)));
+  grid.innerHTML = list.map((it) => {
+    const d = decode(it.code);
+    if (!d) return '';
+    const mine = isMine(d);
+    return `<div class="lvl mine-lvl" style='--img:${miniMap(d)}'>
+      <a class="fill" href="play.html?my=${esc(it.id)}" aria-label="Играть: ${esc(it.name)}" data-my="${esc(it.id)}"></a>
+      <span class="name">${esc(it.name)}</span>
+      ${mine ? `<a class="edit" href="editor.html?edit=${esc(it.id)}" title="Изменить" aria-label="Изменить: ${esc(it.name)}">✏️</a>`
+             : `<button class="edit" type="button" data-copy="${esc(it.id)}" title="Скопировать себе, чтобы менять" aria-label="Скопировать: ${esc(it.name)}">📄</button>`}
+      <span class="meta">${mine ? '▶ Играть' : `🔒 ${esc(d.authorName || 'чужой')}`} · волн ${d.target}</span></div>`;
+  }).join('') + `<a class="lvl add" href="editor.html?new=1"><span class="plus">＋</span><span class="name">Новый уровень</span></a>`;
+}
+
+function showMap() {
+  const m = mapById(mapId);
+  document.title = `Хвосты — ${m.name}`;
+  document.getElementById('title').textContent = `${m.emoji} ${m.name}`;
+  document.getElementById('about').textContent = m.about;
+  const open = progress.unlocked(m.id);
+  grid.style.setProperty('--cols', m.levels.length > 6 ? 5 : m.levels.length);
+  grid.innerHTML = m.levels.map((l) => {
+    const ok = l.id <= open;
+    const st = progress.stars(m.id, l.id);
+    const stars = '⭐'.repeat(st) + '<span class="off">' + '★'.repeat(3 - st) + '</span>';
+    const inner = `<span class="num">${ok ? l.id : '🔒'}</span><span class="name">${l.name}</span>
+      <span class="about">${ok ? l.hint : 'откроется, когда пройдёшь предыдущий'}</span>
+      <span class="meta">${stars} · волн ${l.target}</span>`;
+    const bg = `style="--img:url('${m.preview}')"`;
+    return ok ? `<a class="lvl" ${bg} href="play.html?map=${m.id}&level=${l.id}" data-level="${l.id}">${inner}</a>`
+              : `<div class="lvl locked" ${bg}>${inner}</div>`;
+  }).join('');
+}
+grid.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  const c = myLevels.copyOf(decode(myLevels.get(b.dataset.copy).code));
+  location.href = `editor.html?edit=${encodeURIComponent(c.id)}`;
+});
+if (mapId === 'custom') showMine(); else showMap();
 </script>
 </body>
 </html>

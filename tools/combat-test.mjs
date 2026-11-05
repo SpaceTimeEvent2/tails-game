@@ -2,7 +2,7 @@
 /** Проверка правил без графики: бой персонажа, командная игра, свои уровни. Запуск: node tools/combat-test.mjs */
 import { Sim, HERO, IDLE_AFTER, waveInfo } from '../src/sim.js';
 import { teamMult } from '../src/balance.js';
-import { toLevel, encode, decode, sampleDesign, GHOSTS } from '../src/custom.js';
+import { toLevel, encode, decode, sampleDesign, GHOSTS, copyDesign } from '../src/custom.js';
 let fails = 0;
 const check = (ok, what) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${what}`); if (!ok) fails++; };
 const level = () => toLevel(sampleDesign());
@@ -34,6 +34,22 @@ console.log('удар персонажа');
   const e = enemyNear(s, p, 300); p.safeUntil = 1e9;
   s.time += 1; s.act(1, { k: 'hit', air: 1 });
   check(Math.round(e.hp) === 147, 'в прыжке бьёт в полтора раза сильнее');
+}
+console.log('серия');
+{
+  const s = game(); const p = s.players.get(1); s.act(1, { k: 'pos', x: 0, z: 0, r: 0 }); p.safeUntil = 1e9;
+  const gains = [];
+  for (let i = 0; i < 7; i++) {
+    const e = enemyNear(s, p, 300); e.hp = 1; s.time += 1;
+    p.lives = 5; s.act(1, { k: 'hit' }); s.step(1 / 30); gains.push(p.lives - 4);
+  }
+  check(gains.join() === `${HERO.gain},${HERO.gain},${HERO.gain * 2},${HERO.gain * 2},${HERO.gain * 2},${HERO.gain * 3},${HERO.gain * 3}`, `серия умножает жизни: ${gains.join()}`);
+  s.time += HERO.comboWindow + 1;
+  const e = enemyNear(s, p, 300); e.hp = 1; s.act(1, { k: 'hit' }); s.step(1 / 30);
+  check(p.combo === 1, 'долгая пауза сбрасывает серию');
+  const t = game(); const q = t.players.get(1); t.act(1, { k: 'pos', x: 0, z: 0, r: 0 });
+  q.combo = 5; const m = enemyNear(t, q, 1e6); t.step(1 / 30);
+  check(q.combo === 0, 'удар монстра сбрасывает серию');
 }
 console.log('деньги дают только башни');
 {
@@ -107,6 +123,26 @@ console.log('призрак растёт');
   const r = Sim.fromSnapshot(s.level, spots(s.level), JSON.parse(JSON.stringify(s.snapshot())), [{ id: 1 }]);
   check(r.players.get(1).grow === 4 && r.players.get(1).ghostHero, 'рост переживает смену ведущего');
 }
+console.log('friendly fire');
+{
+  const s = game(2); const [a, b] = [s.players.get(1), s.players.get(2)];
+  for (const id of [1, 2]) s.act(id, { k: 'pos', x: 1, z: 1, r: 0 });
+  a.shells = 100; b.shells = 200;
+  check(s.act(1, { k: 'pvp' }).ok === false, 'без галочки союзника бить нельзя');
+  check(s.act(1, { k: 'hit' }).ok === false && b.lives === HERO.lives, 'обычный удар союзника не задевает');
+  s.ff = true;
+  check(s.act(1, { k: 'pvp' }).ok, 'с галочкой можно');
+  check(b.lives === HERO.lives - HERO.pvpHit && a.lives === HERO.lives - 1, 'союзник теряет жизни, а удар стоит жизнь и бьющему');
+  check(a.shells === 130 && b.shells === 170, 'забирает 15 % ракушек');
+  s.time += 1; b.safeUntil = 0; b.lives = 1; a.hitReady = 0; const la = a.lives;
+  s.act(1, { k: 'pvp' });
+  check(b.down && Math.round(b.shells) === 170 - Math.floor(170 * 0.4), 'нокаут: союзник отдыхает и теряет 40 %');
+  check(a.lives === la - 1 + HERO.pvpKoGain, 'за нокаут бьющему жизни');
+  check(s.act(1, { k: 'pvp' }).ok === false, 'лежачего не бьют');
+  check(s.tails === 5, 'домик не страдает');
+  s.time += HERO.downFor + 0.1; s.step(1 / 30);
+  check(!b.down && s.act(1, { k: 'pvp' }).err === 'Он пока под защитой', 'вернувшийся под защитой');
+}
 console.log('свой уровень');
 {
   const d = { ...sampleDesign(), friends: ['castle', 'iva'], ghosts: 'all' };
@@ -117,6 +153,10 @@ console.log('свой уровень');
   check(toLevel(sampleDesign()).friends.includes('castle'), 'новый уровень сразу с замком');
   check(toLevel({ ...sampleDesign(), ghosts: 'none' }).ghosts === 0, 'привидения можно выключить');
   check(new Sim(toLevel({ ...d, ghosts: 'all' }), { players: [{ id: 1 }], spots: [[0, 0, 1]], rng: () => 0.99 }).ghostChance === GHOSTS.all.chance, 'только привидения');
+  const foreign = decode(encode({ ...d, author: 'someone', authorName: 'Боря' }));
+  check(foreign.author === 'someone' && foreign.authorName === 'Боря', 'автор сохраняется в коде');
+  const cp = copyDesign(foreign);
+  check(cp.name.includes('копия') && cp.author !== 'someone' && cp.cells === foreign.cells, 'копия чужого уровня — с теми же клетками и без прежнего автора');
   const old = Buffer.from(JSON.stringify({ v: 1, n: 'Старый', c: '195.', t: 8, d: 'easy', th: 'castle' })).toString('base64');
   const oldD = decode(old);
   check(oldD && !oldD.friends.length, 'старые коды читаются');

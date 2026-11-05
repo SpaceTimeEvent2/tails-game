@@ -60,7 +60,11 @@ export const SHARE_PLATES_WAVES = 2;    // первые волны плита п
 export const HERO = { lives: 10, maxLives: 20, revive: 5, downFor: 8, reach: 5.5, cool: 0.6, monsterReach: 3.2, monsterCool: 1.5, safe: 0.8,
                       hit: 0.34, hitGhost: 0.25, hitBig: 0.08, airK: 1.5, gain: 4, gainGhost: 5, gainBig: 15,
                       // персонаж-призрак растёт за ракушки, как замок: с каждой стадией длиннее рука и сильнее удар, но он и заметнее для монстров
-                      growCost: [60, 110, 200], growReach: 0.2, growHit: 0.25, growBig: 0.4 };
+                      growCost: [60, 110, 200], growReach: 0.2, growHit: 0.25, growBig: 0.4,
+                      // серия: убивай одного за другим, пока тебя не ударили: с третьего жизни ×2, с шестого ×3
+                      comboWindow: 6, combo2: 3, combo3: 6,
+                      // friendly fire (экспериментальная карта): удар по союзнику отбирает его ракушки, нокаут — ещё больше
+                      pvpHit: 2, pvpSteal: 0.15, pvpKoSteal: 0.25, pvpKoGain: 3 };
 
 /** Множитель здоровья теней для команды: свой у уровня (level.teamHp), иначе общий из TEAM. */
 const TEAM_EASE = { 2: 1, 3: 0.92, 4: 0.86 };   // чем больше команда, тем труднее договориться: боты при подборе этого не знают
@@ -199,6 +203,7 @@ export class Sim {
     this.kills = 0;
     this.leaks = 0;
     this.teamSize = 0;
+    this.ff = false;               // friendly fire: включает создатель экспериментальной игры
     if (this.maze) this.remaze();
     for (const p of players) this.addPlayer(p);
     // у тех, кто начал вместе, стартовые ракушки одинаковые — по размеру всей команды
@@ -238,7 +243,7 @@ export class Sim {
     let n = 1; for (const p of this.players.values()) if (p.active) n++;
     const p = { id, name, color, emoji, active: true, shells: Math.round(this.level.shells * this.multFn(n).shells),
                 built: 0, kills: 0, x: 0, z: 0, ry: 0, run: 0, lastAct: this.time, idle: false,
-                hero: false, ghostHero: false, grow: 1, lives: HERO.lives, down: false, upAt: 0, hitReady: 0, safeUntil: 0 };
+                hero: false, ghostHero: false, grow: 1, combo: 0, comboUntil: 0, lives: HERO.lives, down: false, upAt: 0, hitReady: 0, safeUntil: 0 };
     // опоздавший получает ещё и половину бонусов уже пройденных волн — чтобы было на что строить
     if (this.wave > 0) for (let w = 1; w <= this.wave; w++) p.shells += Math.round(waveInfo(w, this.level, this.multFn(n)).bonus * 0.5);
     this.players.set(id, p);
@@ -345,6 +350,7 @@ export class Sim {
         return { ok: true };
       }
       case 'hit': return this.strike(p, !!a.air);
+      case 'pvp': return this.strikeAlly(p);
       case 'grow': {
         if (!p.ghostHero) return { ok: false, err: 'Расти может только призрак' };
         const cost = HERO.growCost[p.grow - 1];
@@ -395,6 +401,33 @@ export class Sim {
     return { ok: true };
   }
 
+  /** Friendly fire: удар по ближайшему союзнику. Отдельное действие, чтобы по другу нельзя было попасть случайно. */
+  strikeAlly(p) {
+    if (!this.ff) return { ok: false, err: 'В этой игре нельзя бить союзников' };
+    if (!p.hero || p.down || this.time < p.hitReady) return { ok: false, quiet: true };
+    let v = null, best = HERO.reach * (1 + HERO.growReach * (p.grow - 1));
+    for (const o of this.players.values()) {
+      if (o === p || !o.active || !o.hero || o.down) continue;
+      const d = Math.hypot(o.x - p.x, o.z - p.z);
+      if (d <= best) { best = d; v = o; }
+    }
+    if (!v) return { ok: false, err: 'Рядом нет союзника' };
+    if (this.time < v.safeUntil) return { ok: false, err: 'Он пока под защитой' };
+    p.hitReady = this.time + HERO.cool;
+    p.lives--;
+    v.lives -= HERO.pvpHit;
+    v.combo = 0;
+    v.safeUntil = this.time + HERO.safe;
+    const ko = v.lives <= 0;
+    const stolen = Math.floor(v.shells * (ko ? HERO.pvpSteal + HERO.pvpKoSteal : HERO.pvpSteal));
+    v.shells -= stolen;
+    p.shells += stolen;
+    if (ko) p.lives = Math.min(HERO.maxLives, p.lives + HERO.pvpKoGain);
+    this.emit(['P', p.id, v.id, Math.max(0, v.lives), stolen, ko ? 1 : 0]);
+    this.heroesFall();
+    return { ok: true };
+  }
+
   /** Тени бьют персонажа, оказавшегося рядом, и на миг останавливаются — за это время по ним работают башни. */
   monstersAttack(dt) {
     for (const p of this.players.values()) {
@@ -410,6 +443,7 @@ export class Sim {
         if (!p.active || !p.hero || p.down || this.time < p.safeUntil) continue;
         if (Math.hypot(e.x - p.x, e.z - p.z) > HERO.monsterReach + HERO.growBig * (p.grow - 1)) continue;
         p.lives -= e.big ? 3 : 1;
+        p.combo = 0;
         p.safeUntil = this.time + HERO.safe;
         e.hitCool = HERO.monsterCool;
         e.stun = 0.35;
@@ -563,6 +597,9 @@ export class Sim {
       let gain = 0;
       if (hero) {                      // убил персонаж: ракушек нет, зато жизни
         gain = e.big ? HERO.gainBig : e.ghost ? HERO.gainGhost : HERO.gain;
+        hero.combo = this.time <= hero.comboUntil ? hero.combo + 1 : 1;
+        hero.comboUntil = this.time + HERO.comboWindow;
+        gain *= hero.combo >= HERO.combo3 ? 3 : hero.combo >= HERO.combo2 ? 2 : 1;
         if (!hero.down) hero.lives = Math.min(HERO.maxLives, hero.lives + gain);
       } else {
         // награда за тень от башни — каждому игроку команды (делимся, а не соревнуемся)
@@ -570,7 +607,7 @@ export class Sim {
       }
       const killer = this.players.get(e.lastBy);
       if (killer) killer.kills++;
-      this.emit(['k', e.id, e.lastBy || 0, gain]);
+      this.emit(['k', e.id, e.lastBy || 0, gain, hero ? 0 : e.bounty, hero ? hero.combo : 0, e.big ? 1 : 0]);
     }
     this.heroesFall();
 

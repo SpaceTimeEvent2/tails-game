@@ -11,7 +11,8 @@ export function touchCamera(canvas, camera, controls, { left, right } = {}) {
   const fingers = new Map();
   let twist = null, tapFrom = null, spoiled = false, hold = 0, last = 0;
   const coarse = matchMedia('(pointer: coarse)').matches;
-  if (coarse) controls.rotateSpeed = 1.15;     // большой экран: палец проходит больше, поворот не должен быть вялым
+  // поворот считается от высоты экрана: на телефоне лёжа дрожание пальца иначе уводит камеру на десятки градусов
+  if (coarse) controls.rotateSpeed = innerHeight < 520 ? 0.6 : 1.15;
 
   const spin = (a) => {
     off.copy(camera.position).sub(controls.target).applyAxisAngle(up, a);
@@ -68,4 +69,58 @@ export function touchCamera(canvas, camera, controls, { left, right } = {}) {
       return Math.hypot(e.clientX - tapFrom.x, e.clientY - tapFrom.y) <= (TAP_SLOP[tapFrom.type] || 8);
     },
   };
+}
+
+/**
+ * Кнопки срабатывают в момент касания: браузер не присылает click, пока другой палец держит джойстик,
+ * поэтому по click нельзя было прыгать на бегу. Настоящий click после касания гасится, иначе нажатие сработает дважды.
+ */
+export function instantPress(box) {
+  let until = 0;
+  box.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    e.preventDefault();
+    until = Infinity;
+    b.click();
+  });
+  addEventListener('pointerup', () => { if (until === Infinity) until = performance.now() + 500; });
+  addEventListener('pointercancel', () => { if (until === Infinity) until = performance.now() + 500; });
+  box.addEventListener('click', (e) => {
+    if (e.isTrusted && performance.now() < until) { e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true);
+}
+
+/**
+ * Касание холста рядом с кнопками не трогает камеру. Рядом с кнопкой из near — нажимает её (промах по «Прыжку»
+ * всё равно прыжок), рядом с остальными ничего не запускает: волну случайно не отправить. Короткое нажатие уходит в onTap.
+ */
+export function thumbZone(canvas, box, { near = [], onTap, margin = 36 } = {}) {
+  let swallowUntil = 0;
+  box.addEventListener('click', (e) => {
+    if (e.isTrusted && performance.now() < swallowUntil) { e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true);
+  addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || e.target !== canvas) return;
+    let best = null, bd = margin;
+    for (const b of box.querySelectorAll('button')) {
+      const r = b.getBoundingClientRect();
+      if (!r.width) continue;
+      const d = Math.hypot(Math.max(r.left - e.clientX, 0, e.clientX - r.right), Math.max(r.top - e.clientY, 0, e.clientY - r.bottom));
+      if (d <= bd) { bd = d; best = b; }
+    }
+    if (!best) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    swallowUntil = performance.now() + 800;     // браузер сам притягивает нажатие к ближайшей кнопке и шлёт ей click
+    if (near.includes(best)) { if (!best.disabled) best.click(); return; }
+    const { pointerId: id, clientX: x, clientY: y } = e;
+    const up = (u) => {
+      if (u.pointerId !== id) return;
+      removeEventListener('pointerup', up);
+      if (onTap && Math.hypot(u.clientX - x, u.clientY - y) <= TAP_SLOP.touch) onTap(x, y);
+    };
+    addEventListener('pointerup', up);
+  }, { capture: true });
 }

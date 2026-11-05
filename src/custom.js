@@ -25,6 +25,26 @@ export const GHOSTS = {
   many: { name: 'Много', chance: 0.5 }, all: { name: 'Только привидения', chance: 1 },
 };
 
+/* ── автор: аккаунтов нет, поэтому это метка устройства. Править можно только своё, чужое — скопировать. ── */
+const store = () => (typeof localStorage !== 'undefined' ? localStorage : null);
+export function authorId() {
+  const ls = store();
+  if (!ls) return '';
+  let id = ls.getItem('tg.author');
+  if (!id) { id = Math.random().toString(36).slice(2, 10); ls.setItem('tg.author', id); }
+  return id;
+}
+export function authorName() {
+  try { return JSON.parse(store().getItem('tg.me') || '{}').name || ''; } catch (e) { return ''; }
+}
+/** Свой ли уровень. У старых сохранённых автора нет: они созданы здесь, значит свои. У чужого кода без автора — unknown. */
+export const isMine = (d) => !d.author || d.author === authorId();
+/** Копия чужого уровня: автор теперь ты, правь как хочешь. */
+export function copyDesign(d) {
+  const { id, ...rest } = d;
+  return { ...rest, author: authorId(), authorName: authorName(), from: d.authorName || '', name: `${String(d.name || 'Уровень').slice(0, 17)} (копия)` };
+}
+
 export const emptyCells = () => '.'.repeat(EW * EH);
 
 /** Пример для пустого редактора: прямая дорожка слева направо и четыре плиты. */
@@ -101,7 +121,8 @@ const unrle = (s) => s.replace(/(\d+)(\D)/g, (m, n, ch) => ch.repeat(Math.min(EW
 
 export function encode(design) {
   const j = JSON.stringify({ v: 1, n: design.name, c: rle(design.cells), t: design.target, d: design.diff, th: design.theme,
-    f: design.friends && design.friends.length ? design.friends.join(',') : undefined, g: GHOSTS[design.ghosts] ? design.ghosts : undefined });
+    f: design.friends && design.friends.length ? design.friends.join(',') : undefined, g: GHOSTS[design.ghosts] ? design.ghosts : undefined,
+    a: design.author || undefined, an: design.authorName || undefined });
   return b64(unescape(encodeURIComponent(j))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
@@ -115,7 +136,8 @@ export function decode(code) {
     return { v: 1, name: String(j.n || 'Уровень').slice(0, 24), cells, target: Number(j.t) || 8,
              diff: DIFFS[j.d] ? j.d : 'mid', theme: THEMES[j.th] ? j.th : 'quay',
              // в старых кодах этих полей нет: защитники берутся из темы, привидения — как было
-             friends: String(j.f || '').split(',').filter((x) => PICK_FRIENDS.includes(x)), ghosts: GHOSTS[j.g] ? j.g : undefined };
+             friends: String(j.f || '').split(',').filter((x) => PICK_FRIENDS.includes(x)), ghosts: GHOSTS[j.g] ? j.g : undefined,
+             author: typeof j.a === 'string' ? j.a.slice(0, 16) : undefined, authorName: typeof j.an === 'string' ? j.an.slice(0, 14) : undefined };
   } catch (e) {
     return null;
   }
@@ -137,4 +159,6 @@ export const myLevels = {
   },
   remove(id) { localStorage.setItem(KEY, JSON.stringify(this.list().filter((x) => x.id !== id))); },
   get(id) { return this.list().find((x) => x.id === id) || null; },
+  /** Сохранить копию чужого уровня как свой. */
+  copyOf(d) { return this.save(copyDesign(d)); },
 };

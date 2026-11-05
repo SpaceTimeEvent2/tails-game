@@ -17,7 +17,7 @@
  */
 import fs from 'node:fs';
 import { Sim, FRIENDS, towerStats, waveInfo, mulberry32, START_TAILS, Path } from '../src/sim.js';
-import { MAPS, spotsOf, pathsOf } from '../src/levels.js';
+import { MAPS, spotsOf, pathsOf, teamLevel } from '../src/levels.js';
 import { TEAM } from '../src/balance.js';
 
 const args = process.argv.slice(2);
@@ -95,7 +95,7 @@ function makeBot(sim, pid, rng, cover) {
 const coverCache = new Map();
 function coverFor(level, spots) {
   if (level.maze) return null;
-  const key = `${level.map}/${level.id}`;
+  const key = `${level.map}/${level.id}/${level.friends.length}`;
   if (!coverCache.has(key)) {
     const c = {};
     for (const f of level.friends) c[f] = spots.map((s) => coverage(level, s, FRIENDS[f].range));
@@ -105,7 +105,8 @@ function coverFor(level, spots) {
 }
 
 /** Одна партия: n игроков-ботов на уровне, множители mult(n). */
-export function play(level, n, mult, seed, { working = n } = {}) {
+export function play(level0, n, mult, seed, { working = n } = {}) {
+  const level = n > 1 ? teamLevel(level0) : level0;
   const rng = mulberry32(seed);
   const spots = spotsOf(level);
   const players = Array.from({ length: n }, (_, i) => ({ id: i + 1 }));
@@ -147,7 +148,7 @@ function stats(level, n, mult, seeds = SEEDS) {
 /* ─────────────────── подбор множителей ─────────────────── */
 
 const only = opt('--level');   // например --level castle/3
-const allLevels = Object.values(MAPS).flatMap((m) => m.levels).filter((l) => !only || only.split(',').includes(`${l.map}/${l.id}`));
+const allLevels = Object.values(MAPS).filter((m) => !m.hidden || only).flatMap((m) => m.levels).filter((l) => !only || only.split(',').includes(`${l.map}/${l.id}`));
 const meanHealth = (n, mult) => {
   let h = 0;
   for (const l of allLevels) h += stats(l, n, mult).health;
@@ -351,28 +352,6 @@ ${md(['Карта', 'Уровень', 'Волн', 'Плит', 'hpK', 'teamHp 2/3
 
 **Среднее по всем уровням:** ${[1, 2, 3, 4].map((n) => `${n} игр. — запас ${pct(avg(n, 'health'))}, побед ${pct(avg(n, 'win'))}`).join('; ')}.
 
-## «Открытое поле» (Пьяцца): подружки — это стены
-
-Дороги нет: тени идут от калитки к домику по клеткам 13×11 кратчайшим путём (поле расстояний BFS от домика,
-то же, что A* для каждой тени, но сразу для всех). Каждая постройка — препятствие: путь пересчитывается
-мгновенно у всех теней (и у уже идущих). Постройку, которая **полностью перекрывает** дорогу (от калитки или
-от любой тени до домика), хост отклоняет: «Так тени не пройдут». Поэтому баланс лабиринта двойной:
-урон подружек **и** удлинение пути.
-
-${md(['Игроков', 'Путь в начале, клеток', 'Путь в конце (среднее), клеток', 'Удлинение', 'Подружек в конце', 'Запас домика'],
-  [1, 2, 3, 4].map((n) => { const r = res.find((x) => x.l.maze).n[n]; const base = mazeBase(); return [n, base, f1(r.route), `×${(r.route / base).toFixed(2)}`, f1(r.towers), pct(r.health)]; }))}
-
-Бот строит у текущего маршрута (клетки с наибольшим охватом пути), поэтому «лабиринт» у него получается
-сам собой; ребёнок, который нарочно строит змейку, удлиняет путь сильнее — уровень для него легче.
-
-## Карта «Бока»: дорожки и игроки
-
-* «Два причала» (2 дорожки) и «Четыре ветра» (4 дорожки к центру) — тени делятся по дорожкам поровну,
-  у каждой дорожки свои плиты. Одному на «Четырёх ветрах» тяжело: поэтому там 500 стартовых ракушек
-  и \`laneK = 1\` (теней не больше, чем на одной дорожке), а \`hpK\` подобран под одиночную игру —
-  команда дальше выравнивается теми же множителями \`TEAM\`.
-* В командной игре на этих уровнях каждому удобно взять свою дорожку (дорожки чуть разного цвета).
-
 ## Как читать и что дальше
 
 * Боты — не дети: они не ошибаются плитой и не забывают про ракушки дольше 2 секунд. Ребёнок 4–6 лет
@@ -387,6 +366,9 @@ ${md(['Игроков', 'Путь в начале, клеток', 'Путь в �
 
 /** Цель по уровням: первый уровень карты — запас 40 %, последний — 20 %, между — линейно. */
 export const targetHealth = (level) => {
+  // первая партия должна заканчиваться победой: дальше сложность нарастает постепенно
+  const easy = { 1: 0.85, 2: 0.62, 3: 0.48 }[level.id];
+  if (easy) return easy;
   const n = MAPS[level.map].levels.length;
   return 0.4 - 0.2 * ((level.id - 1) / Math.max(1, n - 1));
 };
@@ -408,6 +390,31 @@ function fitLevels() {
   }
 }
 
+/** Подстройка по доле побед: подбор по запасу домика шумит, а игроку важнее, можно ли вообще победить. Цель — 45–85 % у каждого состава (первые уровни — выше). */
+function tuneTeam() {
+  const rounds = Number(opt('--rounds', 4));
+  const LIM = [[1.0, 2.8], [1.1, 3.6], [1.2, 4.4]];
+  for (const l0 of allLevels) {
+    const hp = l0.teamHp.slice();
+    const wins = [];
+    const low = l0.id === 1 ? 0.85 : 0.45, high = l0.id === 1 ? 1.01 : 0.85;
+    for (const n of [2, 3, 4]) {
+      let k = hp[n - 2], w = 0;
+      for (let r = 0; r < rounds; r++) {
+        hp[n - 2] = k;
+        w = stats({ ...l0, teamHp: hp }, n, (q) => TEAM[q]).win;
+        if (w < low) k *= w < 0.25 ? 0.82 : 0.91;
+        else if (w > high) k *= w >= 0.97 ? 1.12 : 1.06;
+        else break;
+        k = Math.round(Math.max(LIM[n - 2][0], Math.min(LIM[n - 2][1], k)) * 100) / 100;
+      }
+      hp[n - 2] = k;
+      wins.push(pct(stats({ ...l0, teamHp: hp }, n, (q) => TEAM[q]).win));
+    }
+    console.log(`${l0.map}/${l0.id}: teamHp [${hp.join(', ')}]  побед ${wins.join(' / ')}`);
+  }
+}
+
 /** Свой множитель здоровья для 2–4 игроков на каждом уровне: запас домика команды = запасу одного игрока. */
 function fitTeamLevels() {
   for (const l0 of allLevels) {
@@ -415,7 +422,7 @@ function fitTeamLevels() {
     const solo = stats(l, 1, (k) => TEAM[k]).health;
     const res = [];
     for (const n of [2, 3, 4]) {
-      let lo = 0.2, hi = 4;
+      let lo = 0.2, hi = 12;
       for (let it = 0; it < 8; it++) {
         const mid = Math.sqrt(lo * hi);
         const h = stats(l, n, (k) => (k === n ? { ...TEAM[k], hp: mid } : TEAM[k])).health;
@@ -428,6 +435,7 @@ function fitTeamLevels() {
 }
 
 if (args.includes('--stress')) stress();
+else if (args.includes('--tune-team')) tuneTeam();
 else if (args.includes('--fit-team-levels')) fitTeamLevels();
 else if (args.includes('--fit-levels')) fitLevels();
 else if (args.includes('--fit')) fit();
