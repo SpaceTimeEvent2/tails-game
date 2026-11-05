@@ -59,3 +59,7 @@ input.code { text-transform: uppercase; letter-spacing: 6px; width: 7.5em; font-
 .who .p.off { opacity: .5; }
 .err { color: #ffb0c0; min-height: 1.2em; }
 [hidden] { display: none !important; }
+
+.video-link { text-align: center; margin: 18px 0 6px; }
+.video-link a { display: inline-block; padding: 10px 20px; border-radius: 999px; background: #ff3d3d; color: #fff; font-weight: 700; text-decoration: none; }
+.video-link a:hover { filter: brightness(1.1); }
