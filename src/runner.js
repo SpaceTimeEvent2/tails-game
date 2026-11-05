@@ -7,21 +7,80 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 
-export const RUNNER_URL = 'assets/characters/tiny-dancer.glb';
+/** Кого можно выбрать в профиле. Скелет у моделей один, поэтому клипы подходят обеим. */
+export const HEROES = {
+  dancer: { name: 'Танцовщица', emoji: '💃', url: 'assets/characters/tiny-dancer.glb' },
+  maskot: { name: 'Маскот', emoji: '⚡', url: 'models/maskot.web.glb' },
+  ghost: { name: 'Призрак', emoji: '👻', url: null },     // без модели: рисуется кодом, растёт за ракушки, как замок
+};
+const GHOST_SCALE = [1, 1.3, 1.65, 2.1];   // стадии роста призрака
+
+export const ghostKit = (() => {
+  const prof = [];
+  for (let i = 0; i <= 16; i++) {
+    const t = i / 16;
+    const y = t * 4.6;
+    const r = t > 0.62 ? Math.sqrt(Math.max(0, 1 - ((t - 0.62) / 0.38) ** 2)) * 1.55
+                       : 1.55 * Math.pow(t / 0.62, 0.7) * (0.25 + 0.75 * t / 0.62) + 0.02;
+    prof.push(new THREE.Vector2(Math.max(0.001, r), y));
+  }
+  const body = new THREE.LatheGeometry(prof, 20);
+  const p = body.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const low = Math.max(0, 1 - y / 2.2);
+    const a = Math.atan2(z, x);
+    p.setXYZ(i, x + low * low * 1.0, y + Math.sin(a * 5) * 0.12 * low, z - low * low * 1.6);
+  }
+  body.computeVertexNormals();
+  return {
+    body, eye: new THREE.SphereGeometry(0.3, 12, 10), shine: new THREE.SphereGeometry(0.09, 8, 6),
+    cheek: new THREE.CircleGeometry(0.22, 14), mouth: new THREE.TorusGeometry(0.15, 0.06, 6, 14),
+    arm: new THREE.SphereGeometry(0.42, 10, 8), blob: new THREE.CircleGeometry(1.5, 20),
+    dark: new THREE.MeshBasicMaterial({ color: 0x2b2c4a }), white: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    blush: new THREE.MeshBasicMaterial({ color: 0xffa3c0, transparent: true, opacity: 0.8 }),
+  };
+})();
+
+
+/** Цвет обволакивает всю фигуру: красит уже освещённый результат, складки и детали остаются видны. */
+function wrapColor(material, tint) {
+  const m = material.clone();
+  const uTint = { value: new THREE.Color(tint) };
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uTint = uTint;
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uTint;')
+      .replace('#include <opaque_fragment>', `float wrapL = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+        outgoingLight = mix(outgoingLight, uTint * (0.32 + 1.05 * wrapL), 0.88);
+        #include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'tint-wrap';
+  return m;
+}
 const HEIGHT = 4.6;
 const MAX_SPEED = 11;           // ед/с при полном отклонении
 const WALK_SPEED_AT = 0.55;     // до этой доли — шаг, дальше — бег
 
-let SRC = null;                 // { gltf, scale }
+// Распрыжка: прыжок сразу при приземлении сохраняет и чуть увеличивает скорость, а в воздухе ею можно рулить.
+// Промахнулся с моментом — на земле скорость быстро падает до обычной.
+const GRAVITY = 38, JUMP_V = 11;
+const HOP_WINDOW = 0.14;        // сколько секунд после приземления скорость ещё не теряется
+const JUMP_BUFFER = 0.18;       // нажатие чуть раньше приземления тоже считается
+const HOP_BOOST = 1.1, HOP_CAP = MAX_SPEED * 2.4;
+const AIR_WISH = 4, AIR_ACCEL = 90;
 
-export async function loadRunnerModel(loader) {
-  if (SRC) return SRC;
-  const gltf = await loader.loadAsync(RUNNER_URL);
+const SRCS = {};                // hero → { gltf, scale }
+
+export async function loadRunnerModel(loader, hero = 'dancer') {
+  const kind = HEROES[hero] ? hero : 'dancer';
+  if (!HEROES[kind].url) return null;
+  if (SRCS[kind]) return SRCS[kind];
+  const gltf = await loader.loadAsync(HEROES[kind].url);
   const size = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3());
-  SRC = { gltf, scale: HEIGHT / Math.max(0.001, size.y) };
-  return SRC;
+  SRCS[kind] = { gltf, scale: HEIGHT / Math.max(0.001, size.y) };
+  return SRCS[kind];
 }
-export const runnerClips = () => (SRC ? SRC.gltf.animations.map((a) => a.name) : []);
 
 /** Надпись-спрайт над головой (ник, значок владельца). */
 export function makeLabel(text, color = '#ffd447', scale = 1) {
@@ -51,26 +110,37 @@ export function makeLabel(text, color = '#ffd447', scale = 1) {
   return sp;
 }
 
-const ONE_SHOT = { jump: ['Jump', '360_Power_Spin_Jump'], build: ['Hammer', 'Heavy_Hammer_Swing'], dance: ['Dance', 'All_Night_Dance'],
-                   cheer: ['Cheer', 'Dance'], sad: ['Kneel_Idle'] };
+const ONE_SHOT = { jump: ['Jump', '360_Power_Spin_Jump', 'Skip_Forward'], build: ['Hammer', 'Heavy_Hammer_Swing', 'Fast_Lightning'], dance: ['Dance', 'All_Night_Dance'],
+                   cheer: ['Cheer', 'Dance', 'All_Night_Dance'], sad: ['Kneel_Idle', 'Kneeling_Reload'] };
 
 export class Runner {
-  constructor(scene, { color = '#ffd447', name = '', me = false } = {}) {
+  constructor(scene, { color = '#ffd447', name = '', me = false, hero = 'dancer', tint = '' } = {}) {
     this.scene = scene;
     this.root = new THREE.Group();
     this.body = new THREE.Group();       // для подпрыгивания без клипа
     this.root.add(this.body);
-    this.model = cloneSkinned(SRC.gltf.scene);
-    this.model.scale.setScalar(SRC.scale);
+    this.ghost = hero === 'ghost';
+    this.stage = 1;
+    this.scaleNow = 1;
+    const SRC = SRCS[hero] || SRCS.dancer || Object.values(SRCS)[0];
+    if (this.ghost) {
+      this.model = this.makeGhost(tint);
+    } else {
+      this.model = cloneSkinned(SRC.gltf.scene);
+      this.model.scale.setScalar(SRC.scale);
+    }
     this.body.add(this.model);
     this.hips = null;
     this.model.traverse((o) => {
       if (o.isBone && !this.hips && /hips/i.test(o.name)) this.hips = o;
-      if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; }
+      if (o.isMesh) {
+        o.castShadow = true; o.frustumCulled = false;
+        if (tint && !this.ghost) o.material = wrapColor(o.material, tint);
+      }
     });
     this.mixer = new THREE.AnimationMixer(this.model);
     this.actions = {};
-    for (const c of SRC.gltf.animations) this.actions[c.name] = this.mixer.clipAction(c);
+    if (!this.ghost) for (const c of SRC.gltf.animations) this.actions[c.name] = this.mixer.clipAction(c);
     this.walk = this.actions.Walking;
     this.run = this.actions.Running;
     for (const a of [this.walk, this.run]) if (a) { a.play(); a.setEffectiveWeight(0); }
@@ -91,22 +161,69 @@ export class Runner {
     }
     this.yaw = 0;
     this.speedK = 0;
-    this.hop = -1;
+    this.vx = 0; this.vz = 0; this.vy = 0; this.y = 0;
+    this.air = false; this.groundT = 1; this.jumpQ = 0;
     this._v = new THREE.Vector3();
     scene.add(this.root);
   }
 
-  /** Своя ходьба: dir — единичный вектор (или 0), mag — 0..1. */
+  makeGhost(tint) {
+    const k = ghostKit, g = new THREE.Group();
+    const color = new THREE.Color(tint || '#eaf6ff');
+    this.ghostMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35, roughness: 0.5, transparent: true, opacity: 0.85 });
+    const body = new THREE.Mesh(k.body, this.ghostMat);
+    body.castShadow = true;
+    g.add(body);
+    for (const s of [-1, 1]) {
+      const e = new THREE.Mesh(k.eye, k.dark); e.position.set(s * 0.5, 3.55, 1.28); e.scale.set(1, 1.15, 0.5);
+      const h = new THREE.Mesh(k.shine, k.white); h.position.set(s * 0.5 + 0.09, 3.68, 1.43);
+      const c = new THREE.Mesh(k.cheek, k.blush); c.position.set(s * 0.9, 3.05, 1.2); c.rotation.y = s * 0.55;
+      const a = new THREE.Mesh(k.arm, this.ghostMat); a.position.set(s * 1.55, 2.6, 0.3); a.scale.set(0.8, 0.55, 0.7);
+      g.add(e, h, c, a);
+    }
+    const m = new THREE.Mesh(k.mouth, k.dark); m.position.set(0, 2.95, 1.42);
+    g.add(m);
+    return g;
+  }
+
+  /** Стадия роста призрака 1–4: заметно больше с каждой, как замок. */
+  setGrow(stage) { if (this.ghost) this.stage = Math.max(1, Math.min(GHOST_SCALE.length, stage | 0)); }
+
+  /** Во сколько раз быстрее обычного бега (для подсказки о распрыжке). */
+  get hopK() { return Math.hypot(this.vx, this.vz) / MAX_SPEED; }
+
+  /** Своё движение: dir — единичный вектор (или 0), mag — 0..1. */
   move(dir, mag, dt, radius = 50) {
     if (this.shot && this.shotLock && mag > 0) this.endShot();
-    const k = Math.min(1, dt * 8);
-    this.speedK += (mag - this.speedK) * k;
+    this.jumpQ -= dt;
+    if (!this.air) {
+      this.groundT += dt;
+      if (this.jumpQ > 0) this.takeOff();
+      else if (this.groundT > HOP_WINDOW) {        // на земле — обычный бег, лишняя скорость быстро гаснет
+        const k = Math.min(1, dt * 10);
+        this.vx += (dir.x * mag * MAX_SPEED - this.vx) * k;
+        this.vz += (dir.z * mag * MAX_SPEED - this.vz) * k;
+      }
+    }
+    if (this.air) {
+      if (mag > 0.02) {                            // в воздухе: добавка только поперёк скорости — так и разгоняются, виляя
+        const add = AIR_WISH * mag - (this.vx * dir.x + this.vz * dir.z);
+        if (add > 0) { const a = Math.min(add, AIR_ACCEL * dt); this.vx += dir.x * a; this.vz += dir.z * a; }
+      }
+      const sp = Math.hypot(this.vx, this.vz);
+      if (sp > HOP_CAP) { this.vx *= HOP_CAP / sp; this.vz *= HOP_CAP / sp; }
+      this.vy -= GRAVITY * dt;
+      this.y += this.vy * dt;
+      if (this.y <= 0) { this.y = 0; this.vy = 0; this.air = false; this.groundT = 0; }
+    }
+    const p = this.root.position;
+    p.x += this.vx * dt;
+    p.z += this.vz * dt;
+    const r = Math.hypot(p.x, p.z);
+    if (r > radius) { p.x *= radius / r; p.z *= radius / r; }
+    this.body.position.y = this.y;
+    this.speedK += (Math.min(1, this.hopK) - this.speedK) * Math.min(1, dt * 8);
     if (mag > 0.02) {
-      const p = this.root.position;
-      p.x += dir.x * MAX_SPEED * this.speedK * dt;
-      p.z += dir.z * MAX_SPEED * this.speedK * dt;
-      const r = Math.hypot(p.x, p.z);
-      if (r > radius) { p.x *= radius / r; p.z *= radius / r; }
       const want = Math.atan2(dir.x, dir.z);
       let d = want - this.yaw;
       d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -115,6 +232,22 @@ export class Runner {
     this.root.rotation.y = this.yaw;
     this.blend(this.speedK);
   }
+
+  takeOff() {
+    const chain = this.groundT <= HOP_WINDOW && this.hopK > 0.6;
+    this.jumpQ = 0;
+    this.air = true;
+    this.vy = JUMP_V;
+    if (chain) {                                   // успел: скорость сохраняется и растёт
+      const k = Math.min(HOP_BOOST, HOP_CAP / Math.max(1, Math.hypot(this.vx, this.vz)));
+      this.vx *= k; this.vz *= k;
+    } else {
+      this.playShot('jump', { lock: false });
+    }
+  }
+
+  /** Сбросить движение (отдых, возврат к домику). */
+  stop() { this.vx = this.vz = this.vy = this.y = 0; this.air = false; this.jumpQ = 0; this.speedK = 0; this.body.position.y = 0; }
 
   /** Чужой персонаж: догоняем точку из снимка и сами выбираем шаг/бег по скорости. */
   follow(x, z, ry, run, dt) {
@@ -177,8 +310,8 @@ export class Runner {
     this.blend(this.speedK);
   }
 
-  jump() { if (!this.playShot('jump', { lock: false })) this.hop = 0; else this.hop = 0; }
-  build() { this.playShot('build'); }
+  jump() { this.jumpQ = JUMP_BUFFER; }
+  build() { if (this.ghost) this.pulse = 1; else this.playShot('build'); }
   dance(sec = 5) { this.playShot('dance', { seconds: sec }); }
   cheer(won) { if (won) this.playShot('cheer', { seconds: 8 }); else this.playShot('sad', { seconds: 6 }); }
 
@@ -191,10 +324,16 @@ export class Runner {
       this.model.position.x -= this._v.x;
       this.model.position.z -= this._v.z;
     }
-    if (this.hop >= 0) {                 // прыжок-подскок (если клипа нет — он и есть прыжок)
-      this.hop += dt / 0.6;
-      this.body.position.y = Math.sin(Math.min(1, this.hop) * Math.PI) * (this.clipFor('jump') ? 0.6 : 2.4);
-      if (this.hop >= 1) { this.hop = -1; this.body.position.y = 0; }
+    if (this.ghost) {                    // парит, при ударе вспыхивает, растёт плавно
+      this.ghostT = (this.ghostT || 0) + dt;
+      this.pulse = Math.max(0, (this.pulse || 0) - dt * 4);
+      const want = GHOST_SCALE[this.stage - 1];
+      this.scaleNow += (want - this.scaleNow) * Math.min(1, dt * 5);
+      this.model.scale.setScalar(this.scaleNow * (1 + this.pulse * 0.15));
+      this.model.position.y = 0.7 + Math.sin(this.ghostT * 2.4) * 0.35;
+      this.ghostMat.emissiveIntensity = 0.35 + this.pulse * 0.8;
+      this.ring.scale.setScalar(this.scaleNow);
+      if (this.label) this.label.position.y = HEIGHT * this.scaleNow + 2;
     }
     this.ring.material.opacity = 0.75 + Math.sin(performance.now() / 300) * 0.15;
   }

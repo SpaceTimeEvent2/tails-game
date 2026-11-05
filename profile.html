@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хвосты — мой персонаж</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="menu.css">
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="waves"></div>
+<main id="pick">
+  <header class="top">
+    <a class="back" id="back" href="index.html">← Домой</a>
+    <div class="grow"><h1 class="title">Мой персонаж</h1></div>
+  </header>
+  <div class="profile-grid">
+    <div class="stage"><canvas id="scene"></canvas><div class="hint" id="stage-hint">Загружаем…</div></div>
+    <div class="choose">
+      <div class="heroes" id="heroes"></div>
+      <div class="field">Цвет персонажа<div class="swatches" id="tints"></div></div>
+      <label class="field">Имя<input type="text" id="name" maxlength="14" placeholder="Например, Алиса"></label>
+      <div class="field">Цвет кольца и значок в команде<div class="swatches" id="colors"></div></div>
+      <div class="swatches" id="emojis"></div>
+    </div>
+  </div>
+</main>
+<script type="module" src="src/profile.js"></script>
+</body>
+</html>

@@ -11,25 +11,34 @@
 <body>
 <div class="waves"></div>
 <main id="pick">
-  <h1 class="title">Хвосты</h1>
-  <p class="sub">Во что играем?</p>
-  <div class="choices" id="maps"></div>
-  <div class="choices small">
-    <a class="choice team" href="lobby.html" id="c-team">
-      <span class="big-emoji">👫</span>
-      <span class="name">Командная игра</span>
-      <span class="about">До четырёх друзей: общий домик, у каждого свои ракушки и подружки.</span>
-    </a>
-    <a class="choice make" href="editor.html" id="c-editor">
-      <span class="big-emoji">🛠</span>
-      <span class="name">Создать уровень</span>
-      <span class="about">Бегай по полю и строй свою дорожку. Сохраняй, играй, делись кодом.</span>
-    </a>
+  <header class="top">
+    <div class="grow"><h1 class="title">Хвосты</h1><p class="sub">Во что играем?</p></div>
+    <a class="pill video" href="https://youtube.com/shorts/52dhWEpxzok" target="_blank" rel="noopener">▶ Видео</a>
+    <a class="pill me" id="me" href="profile.html"></a>
+  </header>
+  <div class="home-grid">
+    <div class="choices" id="maps"></div>
+    <div class="choices small">
+      <a class="choice team" href="lobby.html" id="c-team">
+        <span class="big-emoji">👫</span>
+        <span class="name">Командная игра</span>
+        <span class="about">До четырёх друзей, общий домик</span>
+      </a>
+      <a class="choice make" href="editor.html" id="c-editor">
+        <span class="big-emoji">🛠</span>
+        <span class="name">Создать уровень</span>
+        <span class="about">Строй дорожку, зови привидений</span>
+      </a>
+    </div>
   </div>
-  <p class="video-link"><a href="https://youtube.com/shorts/52dhWEpxzok" target="_blank" rel="noopener">▶ Видео об игре на YouTube</a></p>
 </main>
 <script type="module">
 import { MAPS, progress } from './src/levels.js';
+import { me } from './src/net.js';
+const prof = me();
+const meEl = document.getElementById('me');
+meEl.textContent = `${prof.emoji} ${prof.name || 'Мой персонаж'}`;
+meEl.style.setProperty('--c', prof.color);
 let last = 'quay';
 try { last = localStorage.getItem('tails.choice') || 'quay'; } catch (e) { /* */ }
 document.getElementById('maps').innerHTML = Object.values(MAPS).map((m) => {

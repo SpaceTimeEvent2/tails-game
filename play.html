@@ -22,6 +22,7 @@
   <div class="hud-left">
     <div class="stat big" id="tails-box"><span id="tails">🎀🎀🎀🎀🎀</span></div>
     <div class="stat" title="Мои ракушки">🐚 <b id="shells">0</b></div>
+    <div class="stat" id="lives-box" title="Жизни персонажа: удар стоит жизнь, а побеждённый монстр их даёт" hidden>❤️ <b id="lives">10</b></div>
   </div>
   <div class="hud-center">
     <div class="wave-chip">Волна <b id="wave-num">—</b> <span id="wave-place"></span></div>
@@ -38,12 +39,16 @@
 
 <div id="big-buttons">
   <button id="btn-here" class="huge ghost" hidden title="E">🧱 Строить тут</button>
-  <button id="btn-jump" class="huge ghost" hidden title="Пробел">🤸 Прыжок</button>
+  <button id="btn-jump" class="huge ghost" hidden title="Пробел. Прыгай сразу при приземлении — разгонишься">🤸 Прыжок</button>
+  <button id="btn-hit" class="huge fight" hidden title="Q. Удар стоит жизнь, побеждённый монстр даёт жизни, но не ракушки">👊 Удар</button>
   <button id="btn-dance" class="huge rose">💃 Танцуем!</button>
+  <button id="btn-grow" class="huge ghost" hidden title="G">👻 Подрасти</button>
   <button id="btn-wave" class="huge">🌊 Волна!</button>
 </div>
 
+<div id="spin"><button id="spin-left" type="button" aria-label="Повернуть сцену влево">⟲</button><button id="spin-right" type="button" aria-label="Повернуть сцену вправо">⟳</button></div>
 <div id="joy"><i></i></div>
+<div id="hop" hidden></div>
 
 <div id="build"></div>
 <div id="toast"></div>

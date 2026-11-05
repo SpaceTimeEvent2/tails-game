@@ -7,10 +7,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EW, EH, DIFFS, THEMES, analyze, encode, decode, sampleDesign, emptyCells, myLevels } from './custom.js';
+import { touchCamera } from './touch-camera.js';
+import { EW, EH, DIFFS, THEMES, GHOSTS, PICK_FRIENDS, DEFAULT_FRIENDS, analyze, encode, decode, sampleDesign, emptyCells, myLevels } from './custom.js';
 import { Grid } from './grid.js';
 import { Runner, Joystick, loadRunnerModel } from './runner.js';
 import { me } from './net.js';
+import { FRIENDS } from './sim.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -22,6 +24,8 @@ try { design = JSON.parse(localStorage.getItem('tg.editor.draft') || 'null'); } 
 if (qs.get('code')) design = decode(qs.get('code')) || design;
 if (!design || !design.cells || design.cells.length !== EW * EH) design = sampleDesign();
 let cells = design.cells.split('');
+let picked = design.friends && design.friends.length ? design.friends.slice() : (THEMES[design.theme] || THEMES.quay).friends.slice();
+let ghostMode = GHOSTS[design.ghosts] ? design.ghosts : 'few';
 
 /* ── сцена ── */
 const canvas = $('scene');
@@ -37,6 +41,7 @@ controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI * 0.45;
 controls.minDistance = 20;
 controls.maxDistance = 140;
+const touchCam = touchCamera(canvas, camera, controls, { left: $('spin-left'), right: $('spin-right') });
 camera.position.set(0, 70, 66);
 scene.add(new THREE.HemisphereLight(0xdff4ff, 0x6f8a63, 1.1));
 const sun = new THREE.DirectionalLight(0xfff4d8, 2.2);
@@ -60,10 +65,16 @@ const M = {
   gate: new THREE.MeshStandardMaterial({ color: 0x3a3550, roughness: 0.7 }),
   walls: new THREE.MeshStandardMaterial({ color: 0xf6efe2, roughness: 0.9 }),
   roof: new THREE.MeshStandardMaterial({ color: 0xd9663f, roughness: 0.8 }),
+  ghost: new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, emissive: 0xbfd8ff, emissiveIntensity: 0.5 }),
+  eye: new THREE.MeshBasicMaterial({ color: 0x20304a }),
+  stone: new THREE.MeshStandardMaterial({ color: 0xa3a6ad, roughness: 0.95 }),
+  flag: new THREE.MeshStandardMaterial({ color: 0xc2453d, roughness: 0.8 }),
 };
 const G = {
   tile: new THREE.BoxGeometry(5.8, 0.2, 5.8), road: new THREE.BoxGeometry(6, 0.4, 6),
   spot: new THREE.CylinderGeometry(2.6, 2.8, 0.5, 22), ring: new THREE.TorusGeometry(2.4, 0.14, 8, 28),
+  ghost: new THREE.SphereGeometry(1.1, 16, 12), eye: new THREE.SphereGeometry(0.17, 8, 6),
+  mini: new THREE.CylinderGeometry(0.9, 1.1, 2.4, 8), miniRoof: new THREE.ConeGeometry(1.25, 1.2, 8),
   gate: new THREE.TorusGeometry(2.6, 0.45, 10, 24, Math.PI), walls: new THREE.BoxGeometry(5, 4, 5), roof: new THREE.ConeGeometry(4.6, 2.8, 4),
 };
 const tiles = [];      // трава-подложка (по ней кликают)
@@ -84,8 +95,21 @@ function makeThing(ch) {
   if (ch === 'o') {
     const s = new THREE.Mesh(G.spot, M.spot); s.position.y = 0.3; g.add(s);
     const r = new THREE.Mesh(G.ring, M.ring); r.rotation.x = -Math.PI / 2; r.position.y = 0.6; g.add(r);
+    if (picked.includes('castle')) {       // на этой плите можно будет построить замок
+      const t = new THREE.Mesh(G.mini, M.stone); t.position.y = 1.7; t.castShadow = true;
+      const c = new THREE.Mesh(G.miniRoof, M.flag); c.position.y = 3.5; c.castShadow = true;
+      g.add(t, c);
+    }
   }
-  if (ch === 'S') { const gt = new THREE.Mesh(G.gate, M.gate); gt.position.y = 0.4; gt.castShadow = true; g.add(gt); }
+  if (ch === 'S') {
+    const gt = new THREE.Mesh(G.gate, M.gate); gt.position.y = 0.4; gt.castShadow = true; g.add(gt);
+    if (ghostMode !== 'none') {            // отсюда выйдут привидения
+      const b = new THREE.Mesh(G.ghost, M.ghost); b.position.y = 2.1; b.scale.y = 1.25;
+      const e1 = new THREE.Mesh(G.eye, M.eye), e2 = new THREE.Mesh(G.eye, M.eye);
+      e1.position.set(-0.36, 2.4, 1); e2.position.set(0.36, 2.4, 1);
+      g.add(b, e1, e2);
+    }
+  }
   if (ch === 'H') {
     const w = new THREE.Mesh(G.walls, M.walls); w.position.y = 2.4;
     const r = new THREE.Mesh(G.roof, M.roof); r.position.y = 5.8; r.rotation.y = Math.PI / 4;
@@ -144,7 +168,7 @@ function apply(k, how = tool) {
 
 /* ── проверка, сохранение, код ── */
 function current() {
-  return { ...design, name: $('name').value.trim() || 'Мой уровень', cells: cells.join(''),
+  return { ...design, name: $('name').value.trim() || 'Мой уровень', cells: cells.join(''), friends: picked.slice(), ghosts: ghostMode,
            target: Math.max(3, Math.min(25, Number($('target').value) || 8)), diff: $('diff').value, theme: $('theme').value };
 }
 let lastA = null;
@@ -168,7 +192,7 @@ function changed() {
   const st = $('status');
   st.className = a.ok ? 'ok' : 'bad';
   st.innerHTML = a.ok
-    ? `✅ Можно играть! Дорожек: ${a.paths.length}, плит: ${a.spots.length}.`
+    ? `✅ Можно играть! Дорожек: ${a.paths.length}, плит: ${a.spots.length}, можно строить: ${picked.map((id) => FRIENDS[id].emoji).join('')}${ghostMode === 'none' ? '' : ' · 👻'}.`
     : a.errors.map((e) => `• ${e}`).join('<br>');
   for (const id of ['btn-play', 'btn-team', 'btn-save']) $(id).disabled = !a.ok;
 }
@@ -180,6 +204,21 @@ $('target').value = design.target || 8;
 $('diff').value = DIFFS[design.diff] ? design.diff : 'easy';
 $('theme').value = THEMES[design.theme] ? design.theme : 'quay';
 for (const id of ['name', 'target', 'diff', 'theme']) $(id).addEventListener('change', changed);
+$('ghosts').innerHTML = Object.entries(GHOSTS).map(([k, v]) => `<option value="${k}">${v.name}</option>`).join('');
+$('ghosts').value = ghostMode;
+$('ghosts').addEventListener('change', () => { ghostMode = $('ghosts').value; redrawAll(); changed(); });
+function drawPick() {
+  $('friends').innerHTML = PICK_FRIENDS.map((id) => `<button type="button" data-f="${id}" class="${picked.includes(id) ? 'on' : ''}" title="${FRIENDS[id].name}">${FRIENDS[id].emoji}<b>${FRIENDS[id].name}</b></button>`).join('');
+}
+$('friends').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const id = b.dataset.f;
+  if (picked.includes(id) && picked.length === 1) { toast('Нужен хотя бы один защитник'); return; }
+  picked = picked.includes(id) ? picked.filter((x) => x !== id) : PICK_FRIENDS.filter((x) => x === id || picked.includes(x));
+  drawPick(); redrawAll(); changed();
+};
+drawPick();
+function redrawAll() { for (let k = 0; k < EW * EH; k++) redrawCell(k); }
 
 function save() {
   if (!lastA || !lastA.ok) { toast('Сначала почини уровень — смотри подсказку справа'); return null; }
@@ -215,7 +254,11 @@ function load(d) {
   delete design.id;
   if (d.id) design.id = d.id;
   cells = d.cells.split('');
-  for (let k = 0; k < cells.length; k++) redrawCell(k);
+  picked = d.friends && d.friends.length ? d.friends.slice() : (THEMES[d.theme] || THEMES.quay).friends.slice();
+  ghostMode = GHOSTS[d.ghosts] ? d.ghosts : d.theme === 'castle' ? 'many' : 'few';
+  $('ghosts').value = ghostMode;
+  drawPick();
+  redrawAll();
   $('name').value = d.name; $('target').value = d.target; $('diff').value = d.diff; $('theme').value = d.theme;
   changed();
 }
@@ -266,10 +309,8 @@ $('btn-jump').onclick = () => runner && runner.jump();
 
 // клик/тап по клетке — тоже ставит (персонаж прибегает туда)
 const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
-let down = null;
-canvas.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerup', (e) => {
-  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 8) return;
+  if (!touchCam.isTap(e)) return;
   const r = canvas.getBoundingClientRect();
   mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(mouse, camera);
@@ -327,13 +368,13 @@ function tick() {
 
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 try {
-  await loadRunnerModel(loader);
+  await loadRunnerModel(loader, me().hero);
 } catch (e) {
   console.error(e);
 }
 $('loading').classList.add('done');
 const prof = me();
-runner = new Runner(scene, { color: prof.color, name: '', me: true });
+runner = new Runner(scene, { color: prof.color, name: '', me: true, hero: prof.hero, tint: prof.tint });
 runner.root.position.set(0, 0, 9);
 changed();
 tick();

@@ -93,7 +93,7 @@ function roomView(r) {
     code: r.code, map: r.map, level: r.level, lv: r.lv, levelName: r.levelName, pub: r.pub, status: r.status, host: r.host,
     players: r.order.map((tok) => {
       const p = people.get(tok);
-      return { id: p.id, name: p.name, color: p.color, emoji: p.emoji, online: !!p.ws };
+      return { id: p.id, name: p.name, color: p.color, emoji: p.emoji, hero: p.hero, tint: p.tint, online: !!p.ws };
     }),
   };
 }
@@ -184,6 +184,8 @@ wss.on('connection', (ws, req) => {
       me.name = clean(m.name, 14) || 'Игрок';
       me.color = COLOR.test(m.color) ? m.color : '#ffd447';
       me.emoji = clean(m.emoji, 4) || '🦊';
+      me.hero = ['dancer', 'maskot', 'ghost'].includes(m.hero) ? m.hero : 'dancer';
+      me.tint = COLOR.test(m.tint) ? m.tint : '';
       clearTimeout(me.timer);
       send(ws, { t: 'welcome', id: me.id, token });
       const r = rooms.get(me.room);

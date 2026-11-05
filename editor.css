@@ -22,12 +22,47 @@
 #mine .it { display: flex; gap: 6px; align-items: center; padding: 6px 8px; border-radius: 10px; background: #ffffff10; font-size: 14px; }
 #mine .it span { flex: 1; }
 #mine .it button { padding: 4px 8px; border-radius: 8px; border: 0; background: #ffffff1c; color: #fff; }
-body #big-buttons { right: 318px; }
+body.runner-on #big-buttons { right: 318px; }
 body #toast { left: calc(50% - 150px); }
 @media (max-width: 860px) {
   #side { top: auto; height: 42vh; width: auto; left: 0; }
-  body #big-buttons { right: 12px; bottom: calc(42vh + 12px); }
+  body.runner-on #big-buttons { right: 12px; bottom: calc(42vh + 12px); }
   #tools button { width: 60px; font-size: 22px; }
   #joy { bottom: calc(42vh + 16px); }
 }
 body #toast { top: 128px; }
+
+/* панель редактора помещается в экран: прокручивается только список «Мои уровни» */
+#tools { left: calc((100% - 300px) / 2); }
+#side { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#side > * { flex: none; }
+#side h3 { margin: 0; font-size: 14px; }
+#mine { flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; scrollbar-width: thin; }
+#status { line-height: 1.3; font-size: 13px; padding: 6px 10px; max-height: 66px; overflow: hidden; }
+.pick { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.pick button { display: grid; justify-items: center; padding: 3px 0; font-size: 19px; border-radius: 10px; border: 2px solid #ffffff22; background: #ffffff0c; color: #fff; filter: grayscale(1); opacity: .6; }
+.pick button b { font-size: 9px; font-weight: 600; }
+.pick button.on { border-color: var(--mimosa); background: #ffd4472a; filter: none; opacity: 1; }
+.btns { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.btns .btn { padding: 7px 2px; font-size: 12px; white-space: nowrap; overflow: hidden; min-width: 0; }
+@media (max-height: 520px) {
+  #side { width: 270px; padding: 6px 8px; gap: 4px; font-size: 13px; }
+  #tools { left: calc((100% - 270px) / 2); top: 6px; padding: 4px; gap: 4px; }
+  #tools button { width: 58px; padding: 3px; font-size: 18px; }
+  #tools button b { font-size: 10px; }
+  #side input, #side select { padding: 3px 6px; font-size: 13px; }
+  #side .field { font-size: 11px; gap: 1px; }
+  #side .back { font-size: 12px; }
+  .pick button { padding: 1px 0; font-size: 16px; }
+  .btns .btn { padding: 4px 2px; font-size: 11px; }
+  #side h3, #side .pick button b { display: none; }
+  #status { max-height: 48px; font-size: 11px; padding: 3px 6px; }
+  body.runner-on #big-buttons { right: 280px; bottom: 8px; }
+  body.runner-on #big-buttons .huge { padding: 7px 10px; font-size: 14px; }
+  body #toast { font-size: 13px; padding: 6px 12px; top: 74px; max-width: 56vw; }
+  #joy { left: 10px; bottom: 10px; width: 100px; height: 100px; }
+}
+@media (max-width: 860px) and (orientation: portrait) { #tools { left: 50%; } #side { overflow: auto; } }
+
+#spin { right: auto; left: 14px; top: 96px; transform: none; }
+@media (max-height: 520px) { #spin { left: 8px; top: 8px; } }

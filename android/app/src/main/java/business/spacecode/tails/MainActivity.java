@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -25,8 +26,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        // Обработчик отрезает свой префикс от пути, поэтому он на "/": /www/index.html → assets/www/index.html.
+        // С префиксом "/www/" искался assets/index.html, и страница открывалась пустой.
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
-                .addPathHandler("/www/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
+                .addPathHandler("/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
         web = new WebView(this);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -43,6 +46,13 @@ public class MainActivity extends Activity {
                     return loader.shouldInterceptRequest(u.buildUpon().path("/www" + u.getPath()).build());
                 }
                 return loader.shouldInterceptRequest(u);
+            }
+
+            @Override
+            public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail d) {
+                // процесс страницы упал (например, не хватило памяти): без этого система закрывает всё приложение
+                recreate();
+                return true;
             }
 
             @Override

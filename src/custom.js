@@ -17,6 +17,14 @@ export const THEMES = {
   castle: { name: 'Замок', friends: ['castle'], enemy: 'dancer', sky: 0x9fd2e6, sea: 0x1d7aa0, land: 0x8fae6f, shells: 150 },
 };
 
+/** Кого можно выбрать защитниками уровня (замок — наравне со всеми). */
+export const PICK_FRIENDS = ['mila', 'teya', 'niksha', 'iva', 'maskot', 'castle'];
+export const DEFAULT_FRIENDS = ['mila', 'teya', 'niksha', 'iva', 'castle'];
+export const GHOSTS = {
+  none: { name: 'Без привидений', chance: 0 }, few: { name: 'Немного', chance: 0.25 },
+  many: { name: 'Много', chance: 0.5 }, all: { name: 'Только привидения', chance: 1 },
+};
+
 export const emptyCells = () => '.'.repeat(EW * EH);
 
 /** Пример для пустого редактора: прямая дорожка слева направо и четыре плиты. */
@@ -27,7 +35,7 @@ export function sampleDesign() {
   c[j * EW + 1] = 'S';
   c[j * EW + EW - 2] = 'H';
   for (const i of [3, 6, 9, 12]) c[(j - 2) * EW + i] = 'o';
-  return { v: 1, name: 'Мой уровень', cells: c.join(''), target: 8, diff: 'easy', theme: 'quay' };
+  return { v: 1, name: 'Мой уровень', cells: c.join(''), target: 8, diff: 'easy', theme: 'quay', friends: DEFAULT_FRIENDS.slice(), ghosts: 'few' };
 }
 
 /** Проверка и построение маршрутов: от каждого старта по дороге до домика (A* по клеткам). */
@@ -76,8 +84,8 @@ export function toLevel(design, id = 'my') {
   return {
     id, map: 'custom', name: String(design.name || 'Мой уровень').slice(0, 24), hint: 'Уровень из редактора.',
     path: paths[0], paths: paths.length > 1 ? paths : undefined, spotsList: a.spots, castleWide: design.theme === 'castle',
-    enemy: th.enemy, friends: th.friends, shells: th.shells, target: Math.max(3, Math.min(25, design.target | 0 || 8)),
-    speed: df.speed, hpK: df.hpK, ghosts: design.theme === 'castle' ? 0.35 : 0.25,
+    enemy: th.enemy, friends: design.friends && design.friends.length ? design.friends : th.friends, shells: th.shells, target: Math.max(3, Math.min(25, design.target | 0 || 8)),
+    speed: df.speed, hpK: df.hpK, ghosts: GHOSTS[design.ghosts] ? GHOSTS[design.ghosts].chance : design.theme === 'castle' ? 0.35 : 0.25,
     sky: th.sky, sea: th.sea, land: th.land, runner: true, design,
   };
 }
@@ -92,7 +100,8 @@ const rle = (s) => s.replace(/(.)\1{2,}/g, (m, ch) => m.length + ch);
 const unrle = (s) => s.replace(/(\d+)(\D)/g, (m, n, ch) => ch.repeat(Math.min(EW * EH, Number(n))));
 
 export function encode(design) {
-  const j = JSON.stringify({ v: 1, n: design.name, c: rle(design.cells), t: design.target, d: design.diff, th: design.theme });
+  const j = JSON.stringify({ v: 1, n: design.name, c: rle(design.cells), t: design.target, d: design.diff, th: design.theme,
+    f: design.friends && design.friends.length ? design.friends.join(',') : undefined, g: GHOSTS[design.ghosts] ? design.ghosts : undefined });
   return b64(unescape(encodeURIComponent(j))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
@@ -104,7 +113,9 @@ export function decode(code) {
     const cells = unrle(String(j.c || ''));
     if (cells.length !== EW * EH || /[^.#oSH]/.test(cells)) return null;
     return { v: 1, name: String(j.n || 'Уровень').slice(0, 24), cells, target: Number(j.t) || 8,
-             diff: DIFFS[j.d] ? j.d : 'mid', theme: THEMES[j.th] ? j.th : 'quay' };
+             diff: DIFFS[j.d] ? j.d : 'mid', theme: THEMES[j.th] ? j.th : 'quay',
+             // в старых кодах этих полей нет: защитники берутся из темы, привидения — как было
+             friends: String(j.f || '').split(',').filter((x) => PICK_FRIENDS.includes(x)), ghosts: GHOSTS[j.g] ? j.g : undefined };
   } catch (e) {
     return null;
   }

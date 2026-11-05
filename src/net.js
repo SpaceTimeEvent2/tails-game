@@ -5,6 +5,8 @@
  */
 export const COLORS = ['#ffd447', '#ff6f91', '#8fd0ff', '#9be37a', '#c7b0ff', '#ffa45c'];
 export const EMOJIS = ['🦊', '🐱', '🐬', '🐢', '🦄', '🐝', '🐙', '🐸'];
+export const HERO_IDS = ['dancer', 'maskot', 'ghost'];
+export const TINTS = ['', '#ff9dbb', '#8fd0ff', '#9be37a', '#ffe07a', '#c7b0ff', '#ffa45c', '#8b8fa8'];   // цвет поверх текстуры, '' — как есть
 
 export function me() {
   let m = {};
@@ -13,6 +15,8 @@ export function me() {
     name: m.name || '',
     color: COLORS.includes(m.color) ? m.color : COLORS[0],
     emoji: EMOJIS.includes(m.emoji) ? m.emoji : EMOJIS[0],
+    hero: HERO_IDS.includes(m.hero) ? m.hero : HERO_IDS[0],
+    tint: TINTS.includes(m.tint) ? m.tint : '',
   };
 }
 export function saveMe(m) { try { localStorage.setItem('tg.me', JSON.stringify(m)); } catch (e) { /* */ } }

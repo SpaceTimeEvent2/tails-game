@@ -11,11 +11,12 @@
 <body>
 <div class="waves"></div>
 <main id="pick">
-  <a class="back" href="index.html">← Карты</a>
-  <h1 class="title" id="title"></h1>
-  <p class="sub" id="about"></p>
+  <header class="top">
+    <a class="back" href="index.html">← Карты</a>
+    <div class="grow"><h1 class="title" id="title"></h1><p class="sub" id="about"></p></div>
+    <a class="pill" href="lobby.html">👫 С друзьями</a>
+  </header>
   <div class="levels" id="levels"></div>
-  <p class="hint">Пройди уровень — откроется следующий. Звёзды: ⭐⭐⭐ — ни одного хвостика не утащили.</p>
 </main>
 <script type="module">
 import { mapById, progress } from './src/levels.js';
@@ -24,15 +25,17 @@ document.title = `Хвосты — ${m.name}`;
 document.getElementById('title').textContent = `${m.emoji} ${m.name}`;
 document.getElementById('about').textContent = m.about;
 const open = progress.unlocked(m.id);
+document.getElementById('levels').style.setProperty('--cols', m.levels.length > 6 ? 5 : m.levels.length);
 document.getElementById('levels').innerHTML = m.levels.map((l) => {
   const ok = l.id <= open;
   const st = progress.stars(m.id, l.id);
   const stars = '⭐'.repeat(st) + '<span class="off">' + '★'.repeat(3 - st) + '</span>';
-  const inner = `<span class="num">${ok ? l.id : '🔒'}</span><span class="name">${l.name}</span>
+  const inner = `<span class="num">${ok ? l.id : '🔒'}</span><span class="name">${ok ? l.name : l.name}</span>
     <span class="about">${ok ? l.hint : 'откроется, когда пройдёшь предыдущий'}</span>
-    <span class="meta">${stars} · волн ${l.target}${l.players ? ` · игроков ${l.players}` : ''}</span>`;
-  return ok ? `<a class="lvl" href="play.html?map=${m.id}&level=${l.id}" data-level="${l.id}">${inner}</a>`
-            : `<div class="lvl locked">${inner}</div>`;
+    <span class="meta">${stars} · волн ${l.target}</span>`;
+  const bg = `style="--img:url('${m.preview}')"`;
+  return ok ? `<a class="lvl" ${bg} href="play.html?map=${m.id}&level=${l.id}" data-level="${l.id}">${inner}</a>`
+            : `<div class="lvl locked" ${bg}>${inner}</div>`;
 }).join('');
 </script>
 </body>

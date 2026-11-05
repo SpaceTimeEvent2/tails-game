@@ -11,11 +11,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { touchCamera } from './touch-camera.js';
 import { mapById, resolveLevel, spotsOf, houseOf, pathsOf, progress } from './levels.js';
-import { Sim, FRIENDS, FRIEND_KEYS, Path, mazeState, starsFor, towerStats, START_TAILS, DANCE_LEN } from './sim.js';
+import { HERO, Sim, FRIENDS, FRIEND_KEYS, Path, mazeState, starsFor, towerStats, START_TAILS, DANCE_LEN } from './sim.js';
 import { Net, me as myProfile } from './net.js';
 import { myLevels } from './custom.js';
-import { Runner, Joystick, loadRunnerModel, makeLabel } from './runner.js';
+import { Runner, Joystick, loadRunnerModel, makeLabel, HEROES, ghostKit } from './runner.js';
 
 const $ = (id) => document.getElementById(id);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -85,13 +86,18 @@ const SIMPATHS = pathsOf(level).map((p) => new Path(p));
 const MAZE = !!level.maze;
 const FRIEND_IDS = level.friends;
 const CASTLE = FRIEND_IDS.includes('castle');
-const RUNNER_ON = level.map !== 'quay' || qs.has('runner');
+const RUNNER_ON = level.map !== 'quay' || TEAM || qs.has('runner');   // в командной игре персонажи бегают на всех картах
 if (CASTLE) $('load-text').textContent = 'Носим камни для замка…';
 
 /* ─────────────────── сцена ─────────────────── */
 
 const canvas = $('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: DEBUG });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: DEBUG });
+} catch (err) {   // нет WebGL: иначе экран загрузки остаётся навсегда
+  failPage('Это устройство не смогло запустить 3D-графику :( / This device could not start 3D graphics');
+}
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -110,6 +116,7 @@ controls.dampingFactor = 0.08;
 controls.minDistance = 14;
 controls.maxDistance = 90;
 controls.maxPolarAngle = Math.PI * 0.45;
+const touchCam = touchCamera(canvas, camera, controls, { left: $('spin-left'), right: $('spin-right') });
 
 scene.add(new THREE.HemisphereLight(0xdff4ff, 0x6f8a63, 1.1));
 const sun = new THREE.DirectionalLight(0xfff4d8, 2.2);
@@ -397,33 +404,6 @@ class CastleActor {
 }
 
 /* привидения — весёлые, не страшные */
-const ghostKit = (() => {
-  const prof = [];
-  for (let i = 0; i <= 16; i++) {
-    const t = i / 16;
-    const y = t * 4.6;
-    const r = t > 0.62 ? Math.sqrt(Math.max(0, 1 - ((t - 0.62) / 0.38) ** 2)) * 1.55
-                       : 1.55 * Math.pow(t / 0.62, 0.7) * (0.25 + 0.75 * t / 0.62) + 0.02;
-    prof.push(new THREE.Vector2(Math.max(0.001, r), y));
-  }
-  const body = new THREE.LatheGeometry(prof, 20);
-  const p = body.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const low = Math.max(0, 1 - y / 2.2);
-    const a = Math.atan2(z, x);
-    p.setXYZ(i, x + low * low * 1.0, y + Math.sin(a * 5) * 0.12 * low, z - low * low * 1.6);
-  }
-  body.computeVertexNormals();
-  return {
-    body, eye: new THREE.SphereGeometry(0.3, 12, 10), shine: new THREE.SphereGeometry(0.09, 8, 6),
-    cheek: new THREE.CircleGeometry(0.22, 14), mouth: new THREE.TorusGeometry(0.15, 0.06, 6, 14),
-    arm: new THREE.SphereGeometry(0.42, 10, 8), blob: new THREE.CircleGeometry(1.5, 20),
-    dark: new THREE.MeshBasicMaterial({ color: 0x2b2c4a }), white: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-    blush: new THREE.MeshBasicMaterial({ color: 0xffa3c0, transparent: true, opacity: 0.8 }),
-  };
-})();
-
 class GhostActor {
   constructor(scale = 1) {
     const k = ghostKit;
@@ -562,9 +542,9 @@ function viewFromSim() {
 /** Клиент: снимок хоста → вид. Положение теней дальше «доезжает» само между снимками. */
 function viewFromSnap(s) {
   const players = new Map();
-  for (const [id, shells, active, built, kills, x, z, ry, run] of s.p) {
+  for (const [id, shells, active, built, kills, x, z, ry, run, idle, , lives, downLeft, , grow] of s.p) {
     const r = roster.get(id) || {};
-    players.set(id, { id, shells, active: !!active, built, kills, x, z, ry, run,
+    players.set(id, { id, shells, active: !!active, built, kills, x, z, ry, run, idle: !!idle, lives: lives ?? 0, down: downLeft > 0, grow: grow || 1,
                       name: r.name || '', color: r.color || '#ffd447', emoji: r.emoji || '🦊' });
   }
   view.players = players;
@@ -744,6 +724,16 @@ const myShells = () => (myPlayer() ? myPlayer().shells : 0);
 function drawHud() {
   $('tails').textContent = '🎀'.repeat(Math.max(0, view.tails)) + '·'.repeat(Math.max(0, START_TAILS - view.tails));
   $('shells').textContent = myShells();
+  if (RUNNER_ON && myPlayer()) {
+    const pl = myPlayer();
+    $('lives').textContent = pl.down ? '💤' : pl.lives;
+    $('lives-box').classList.toggle('low', pl.down || pl.lives <= 3);
+    if (profile.hero === 'ghost') {
+      const cost = HERO.growCost[(pl.grow || 1) - 1];
+      $('btn-grow').textContent = cost === undefined ? '👻 Самый большой' : `👻 Подрасти 🐚 ${cost}`;
+      $('btn-grow').disabled = cost === undefined || pl.shells < cost;
+    }
+  }
   $('wave-num').textContent = view.wave || '—';
   $('wave-place').textContent = view.wave
     ? `${level.name} · до конца ${Math.max(0, level.target - view.wave)}`
@@ -760,7 +750,7 @@ function drawHud() {
       const host = room && room.host === id;
       rows.push(`<div class="pl${id === myId ? ' me' : ''}${online ? '' : ' off'}" style="--c:${r.color}" data-id="${id}">
         <span class="dot"></span><b>${r.emoji} ${escapeHtml(r.name || 'Игрок')}</b>${host ? ' <i title="ведёт игру">👑</i>' : ''}
-        <span class="sh">🐚 ${p ? p.shells : '—'}</span></div>`);
+        ${p && p.idle ? '<i title="отошёл: волны рассчитаны на тех, кто играет">💤</i>' : ''}<span class="sh">🐚 ${p ? p.shells : '—'}${RUNNER_ON && p ? ` ❤️ ${p.lives}` : ''}</span></div>`);
     }
     $('team').innerHTML = rows.join('');
   }
@@ -797,6 +787,24 @@ function showBuild(spotIndex) {
     info.className = 'friend info';
     info.innerHTML = `<span class="face">${FRIENDS[tower.id].emoji}</span><b>${FRIENDS[tower.id].name}</b><span class="price">${escapeHtml(ownerName(tower.owner))}</span>`;
     host.append(info);
+    // подружку друга можно растить на свои ракушки; подружку ушедшего — ещё и отправить домой
+    const upCost = towerUpCost(tower);
+    const up = document.createElement('button');
+    up.className = 'friend';
+    up.dataset.act = 'up';
+    up.innerHTML = `<span class="face">⬆️</span><b>Помочь расти</b><span class="price">🐚 ${upCost}</span>`;
+    up.disabled = shells < upCost;
+    up.onclick = () => { if (doAct({ k: 'up', s: spotIndex })) setTimeout(() => { if (pickedSpot === spotIndex) showBuild(spotIndex); }, 250); };
+    host.append(up);
+    const ow = view.players.get(tower.owner);
+    if (!ow || !ow.active) {
+      const bye = document.createElement('button');
+      bye.className = 'friend';
+      bye.dataset.act = 'sell';
+      bye.innerHTML = `<span class="face">🏠</span><b>Домой</b><span class="price">🐚 +${Math.round(towerSpent(tower) / 2)}</span>`;
+      bye.onclick = () => { doAct({ k: 'sell', s: spotIndex }); hideBuild(); };
+      host.append(bye);
+    }
   } else if (tower) {
     const upCost = towerUpCost(tower);
     const up = document.createElement('button');
@@ -893,7 +901,41 @@ function handleEvents(events) {
         fx.balls.push({ mesh: ball, target: ev[2] });
         break;
       }
-      case 'k': { const p = posOfEnemy(ev[1]); if (p) sparks(p, 3); break; }
+      case 'k': {
+        const p = posOfEnemy(ev[1]);
+        if (p) sparks(p, ev[3] ? 8 : 3, ev[3] ? 0xff6f91 : 0xffd447);
+        if (ev[3] && ev[2] === myId) toast(`❤️ +${ev[3]} — монстр побеждён!`, 1600);
+        break;
+      }
+      case 'm': {                                   // удар персонажа
+        const p = posOfEnemy(ev[1]);
+        if (p) sparks(p, 5, 0xffffff);
+        if (ev[2] === myId) { if (runner) runner.build(); } else if (others.has(ev[2])) others.get(ev[2]).build();
+        break;
+      }
+      case 'h':                                     // монстр ударил персонажа
+        if (ev[1] === myId) {
+          document.body.classList.add('hurt');
+          setTimeout(() => document.body.classList.remove('hurt'), 260);
+          if (runner) sparks(runner.root.position, 5, 0xff4d4d);
+        }
+        break;
+      case 'o':                                     // жизни кончились
+        if (ev[1] === myId) {
+          if (runner) { runner.stop(); runner.cheer(false); }
+          say('Ой, устала! Надо отдохнуть.');
+          toast(`💤 Жизни кончились. Отдых ${ev[2]} с — башни пока работают сами`, 4000);
+        }
+        break;
+      case 'r':                                     // вернулся
+        if (ev[1] === myId && runner) { runner.stop(); runner.endShot(); placeAtHome(); toast('❤️ Снова в строю!', 1600); }
+        break;
+      case 'G':                                     // призрак подрос
+        if (ev[1] === myId) { if (runner) sparks(runner.root.position, 12, 0xbfe6ff); toast(`👻 Призрак подрос! Стадия ${ev[2]} из ${HERO.growCost.length + 1}`, 1800); say('Расту!'); }
+        break;
+      case 'i':                                     // кто-то отошёл или вернулся
+        if (ev[1] !== myId && TEAM) toast(ev[2] ? `💤 ${ownerName(ev[1])} отошёл — волны станут меньше, половина ракушек у вас` : `👋 ${ownerName(ev[1])} вернулся`, 3000);
+        break;
       case 'l':
         document.body.classList.add('shake');
         setTimeout(() => document.body.classList.remove('shake'), 500);
@@ -990,7 +1032,12 @@ function updateRunners(dt) {
   _right.set(-_fwd.z, 0, _fwd.x);
   _dir.set(0, 0, 0).addScaledVector(_fwd, iy).addScaledVector(_right, ix);
   if (_dir.lengthSq() > 1e-4) _dir.normalize();
+  if (myPlayer() && myPlayer().down) { mag = 0; _dir.set(0, 0, 0); }   // отдыхает
   runner.move(_dir, mag, dt, LAND_R - 2);
+  if (myPlayer()) runner.setGrow(myPlayer().grow);
+  const hopK = runner.hopK;
+  $('hop').hidden = hopK < 1.15;
+  if (hopK >= 1.15) $('hop').textContent = `🐇 ×${hopK.toFixed(1)}`;
   if (follow && (mag > 0 || runner.following)) {
     runner.following = mag > 0 || controls.target.distanceTo(tmp.set(runner.root.position.x, 0, runner.root.position.z)) > 0.5;
     const p = runner.root.position;
@@ -1004,7 +1051,7 @@ function updateRunners(dt) {
   if (runner.sendT <= 0 && (sim || net)) {
     runner.sendT = 0.1;
     const p = runner.root.position;
-    const a = { k: 'pos', x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, r: Math.round(runner.yaw * 100) / 100, v: runner.speedK > 0.05 ? 1 : 0 };
+    const a = { k: 'pos', x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, r: Math.round(runner.yaw * 100) / 100, v: runner.speedK > 0.05 ? 1 : 0, g: runner.ghost ? 1 : 0 };
     const last = runner.lastSent;
     if (!last || last.x !== a.x || last.z !== a.z || last.r !== a.r || last.v !== a.v) {
       runner.lastSent = a;
@@ -1018,11 +1065,12 @@ function updateRunners(dt) {
     let o = others.get(id);
     if (!o) {
       const r = roster.get(id) || p;
-      o = new Runner(scene, { color: r.color, name: `${r.emoji} ${r.name || 'Игрок'}` });
+      o = new Runner(scene, { color: r.color, name: `${r.emoji} ${r.name || 'Игрок'}`, hero: r.hero, tint: r.tint });
       o.root.position.set(p.x, 0, p.z);
       others.set(id, o);
     }
     o.follow(p.x, p.z, p.ry, p.run, dt);
+    o.setGrow(p.grow || 1);
   }
   for (const [id, o] of others) {
     const p = view.players.get(id);
@@ -1046,11 +1094,8 @@ function nearestSpot() {
 
 const ray = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-let downAt = null;
-canvas.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerup', (e) => {
-  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 8) return;   // это был поворот камеры
-  pickAt(e.clientX, e.clientY);
+  if (touchCam.isTap(e)) pickAt(e.clientX, e.clientY);    // иначе это был поворот камеры
 });
 function pickAt(cx, cy) {
   const r = canvas.getBoundingClientRect();
@@ -1083,7 +1128,14 @@ $('btn-cam').onclick = () => {
   if (!follow) fitCamera(); else if (runner) runner.following = true;
 };
 $('btn-jump').hidden = !RUNNER_ON;
-$('btn-jump').onclick = () => runner && runner.jump();
+const tryJump = () => { if (runner && !(myPlayer() && myPlayer().down)) runner.jump(); };
+$('btn-jump').onclick = tryJump;
+$('btn-hit').hidden = !RUNNER_ON;
+$('btn-grow').hidden = !RUNNER_ON || profile.hero !== 'ghost';
+$('btn-grow').onclick = () => doAct({ k: 'grow' });
+$('lives-box').hidden = !RUNNER_ON;
+const strike = () => { if (runner) doAct({ k: 'hit', air: runner.air ? 1 : 0 }); };
+$('btn-hit').onclick = strike;
 $('btn-here').hidden = !RUNNER_ON;
 $('btn-here').onclick = () => { const s = nearestSpot(); if (s >= 0) { highlight(s); showBuild(s); } else toast('Подбеги к плите поближе'); };
 if (TEAM) document.body.classList.add('team');
@@ -1092,7 +1144,9 @@ if (RUNNER_ON) document.body.classList.add('runner-on');
 addEventListener('keydown', (e) => {
   if (isTyping()) return;
   if (RUNNER_ON && /^(KeyW|KeyA|KeyS|KeyD|ArrowUp|ArrowDown|ArrowLeft|ArrowRight)$/.test(e.code)) { keys.add(e.code); e.preventDefault(); return; }
-  if (e.code === 'Space') { e.preventDefault(); if (RUNNER_ON) { if (runner) runner.jump(); } else doAct({ k: 'wave' }); }
+  if (e.code === 'Space') { e.preventDefault(); if (RUNNER_ON) tryJump(); else doAct({ k: 'wave' }); }
+  if ((e.code === 'KeyQ' || e.code === 'KeyR') && RUNNER_ON && !e.repeat) strike();
+  if (e.code === 'KeyG' && RUNNER_ON && !e.repeat && profile.hero === 'ghost') doAct({ k: 'grow' });
   if (e.code === 'Enter' || e.code === 'KeyV') doAct({ k: 'wave' });
   if (e.code === 'KeyF' || (!RUNNER_ON && e.code === 'KeyD')) $('btn-dance').click();
   if (e.code === 'KeyE' && RUNNER_ON) $('btn-here').click();
@@ -1311,23 +1365,27 @@ const loadOne = (url) => new Promise((ok, bad) => loader.load(url, ok, (e) => {
 }, bad));
 
 try {
-  await Promise.all([...jobs.map((j) => loadOne(j.url).then(j.ok)), RUNNER_ON ? loadRunnerModel(loader) : null]);
+  await Promise.all([...jobs.map((j) => loadOne(j.url).then(j.ok)), ...(RUNNER_ON ? (TEAM ? Object.keys(HEROES) : [profile.hero]).map((h) => loadRunnerModel(loader, h)) : [])]);
 } catch (err) {
   console.error(err);
   failPage('Не получилось загрузить модель :(');
 }
 begin();
 
+/** Встаём рядом с домиком, каждый игрок — чуть в стороне. */
+function placeAtHome() {
+  const toC = Math.hypot(HOUSE[0], HOUSE[1]) > 1 ? [-HOUSE[0], -HOUSE[1]] : [0, 1];
+  const l = Math.hypot(...toC);
+  runner.root.position.set(HOUSE[0] + (toC[0] / l) * 9 + ((myId % 4) - 1.5) * 2.5, 0, HOUSE[1] + (toC[1] / l) * 9 + 3);
+}
+
 function begin() {
   $('loading').classList.add('done');
   ready = true;
   const dist = fitCamera();
   if (RUNNER_ON) {
-    runner = new Runner(scene, { color: profile.color, name: TEAM ? `${profile.emoji} ${profile.name || 'Я'}` : '', me: true });
-    // встаём рядом с домиком, каждый игрок — чуть в стороне
-    const toC = Math.hypot(HOUSE[0], HOUSE[1]) > 1 ? [-HOUSE[0], -HOUSE[1]] : [0, 1];
-    const l = Math.hypot(...toC);
-    runner.root.position.set(HOUSE[0] + (toC[0] / l) * 9 + ((myId % 4) - 1.5) * 2.5, 0, HOUSE[1] + (toC[1] / l) * 9 + 3);
+    runner = new Runner(scene, { color: profile.color, name: TEAM ? `${profile.emoji} ${profile.name || 'Я'}` : '', me: true, hero: profile.hero, tint: profile.tint });
+    placeAtHome();
     camera.position.sub(controls.target).multiplyScalar(Math.min(1, 60 / dist)).add(controls.target);
     runner.following = true;
   }
@@ -1348,8 +1406,8 @@ function begin() {
   say(level.speech || `${level.name}. Ставь подружек на плиты!`);
   tick();
   if (DEBUG) {
-    window.__td = { view, get sim() { return sim; }, doAct, showBuild, SPOTS, spotMeshes, camera, controls, level,
-      get isHost() { return isHost; }, get myId() { return myId; }, get runner() { return runner; }, others, keys, pickAt,
+    window.__td = { joy, view, get sim() { return sim; }, doAct, showBuild, SPOTS, spotMeshes, camera, controls, level,
+      get isHost() { return isHost; }, get myId() { return myId; }, get runner() { return runner; }, touchCam, others, keys, pickAt,
       net, roster, get lastSnap() { return lastSnap; }, nearestSpot, towerActors, enemyActors, renderer };
   }
 }

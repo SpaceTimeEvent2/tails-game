@@ -11,22 +11,16 @@
 <body>
 <div class="waves"></div>
 <main id="pick">
-  <a class="back" href="index.html">← Домой</a>
-  <h1 class="title">👫 Командная игра</h1>
-  <p class="sub">До четырёх друзей: общий домик и общие волны, у каждого — свои ракушки и подружки.</p>
+  <header class="top">
+    <a class="back" href="index.html">← Домой</a>
+    <div class="grow"><h1 class="title">Командная игра</h1><p class="sub">До четырёх друзей: общий домик и общие волны. Подружек можно растить вместе.</p></div>
+    <a class="pill me" id="me" href="profile.html?back=lobby"></a>
+  </header>
 
-  <section class="panel2" id="me-panel">
-    <h2>Кто ты?</h2>
-    <div class="row">
-      <label class="field">Имя<input type="text" id="name" maxlength="14" placeholder="Например, Алиса"></label>
-    </div>
-    <div class="field">Цвет<div class="swatches" id="colors"></div></div>
-    <div class="field">Значок<div class="swatches" id="emojis"></div></div>
-  </section>
-
-  <section class="panel2" id="room-panel" hidden>
+  <section class="panel2 room" id="room-panel" hidden>
     <h2>Игра <span id="room-where"></span></h2>
-    <div>Код для друзей: <div class="bigcode" id="room-code">····</div></div>
+    <div class="empty">Код для друзей</div>
+    <div class="bigcode" id="room-code">····</div>
     <div class="who" id="room-players"></div>
     <div class="row">
       <button class="btn big" id="btn-start">▶ Играем!</button>
@@ -35,32 +29,32 @@
     </div>
   </section>
 
-  <div id="lobby-main" style="display:contents">
-  <section class="panel2">
-    <h2>Открытые игры</h2>
-    <div class="games" id="games"><div class="empty">Подключаемся…</div></div>
-  </section>
-
-  <section class="panel2">
-    <h2>Войти по коду</h2>
-    <div class="row">
-      <input type="text" class="code" id="join-code" maxlength="4" placeholder="КОД" autocomplete="off">
-      <button class="btn big" id="btn-join">Войти</button>
+  <div class="lobby-grid" id="lobby-main">
+    <section class="panel2">
+      <h2>Открытые игры</h2>
+      <div class="games" id="games"><div class="empty">Подключаемся…</div></div>
+    </section>
+    <div class="stack">
+      <section class="panel2">
+        <h2>Войти по коду</h2>
+        <div class="row">
+          <input type="text" class="code" id="join-code" maxlength="4" placeholder="КОД" autocomplete="off">
+          <button class="btn big" id="btn-join" style="flex:1">Войти</button>
+        </div>
+      </section>
+      <section class="panel2" style="justify-content:space-between">
+        <h2>Создать игру</h2>
+        <div class="row fill">
+          <label class="field">Карта<select id="map"></select></label>
+          <label class="field">Уровень<select id="level"></select></label>
+        </div>
+        <div class="row vis">
+          <label><input type="radio" name="vis" value="pub" checked> Открытая</label>
+          <label><input type="radio" name="vis" value="code"> Только по коду</label>
+        </div>
+        <button class="btn big" id="btn-create">✨ Создать</button>
+      </section>
     </div>
-  </section>
-
-  <section class="panel2">
-    <h2>Создать командную игру</h2>
-    <div class="row">
-      <label class="field">Карта<select id="map"></select></label>
-      <label class="field">Уровень<select id="level"></select></label>
-    </div>
-    <div class="row">
-      <label><input type="radio" name="vis" value="pub" checked> Открытая — видна в списке</label>
-      <label><input type="radio" name="vis" value="code"> Только по коду</label>
-    </div>
-    <div class="row"><button class="btn big" id="btn-create">✨ Создать</button></div>
-  </section>
   </div>
   <p class="err" id="err"></p>
 </main>

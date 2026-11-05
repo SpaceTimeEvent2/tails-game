@@ -28,20 +28,23 @@
 
 <aside id="side">
   <a class="back" href="index.html">← Домой</a>
-  <h2>🛠 Свой уровень</h2>
   <label class="field">Название<input type="text" id="name" maxlength="24"></label>
   <div class="row2">
     <label class="field">Волн<input type="number" id="target" min="3" max="25" value="8"></label>
     <label class="field">Сложность<select id="diff"></select></label>
   </div>
-  <label class="field">Тема<select id="theme"></select></label>
+  <div class="row2">
+    <label class="field">Вид поля<select id="theme"></select></label>
+    <label class="field">👻 Привидения<select id="ghosts"></select></label>
+  </div>
+  <div class="field">Кого можно строить<div id="friends" class="pick"></div></div>
   <div id="status"></div>
   <div class="btns">
     <button class="btn" id="btn-save">💾 Сохранить</button>
     <button class="btn" id="btn-play">▶ Играть</button>
-    <button class="btn ghost" id="btn-team">👫 Командная игра</button>
+    <button class="btn ghost" id="btn-team">👫 С друзьями</button>
     <button class="btn ghost" id="btn-export">📋 Код</button>
-    <button class="btn ghost" id="btn-import">📥 Вставить код</button>
+    <button class="btn ghost" id="btn-import">📥 Вставить</button>
     <button class="btn ghost" id="btn-new">🧹 Новый</button>
   </div>
   <textarea id="code" rows="3" placeholder="Код уровня" hidden></textarea>
@@ -53,6 +56,7 @@
   <button id="btn-put" class="huge" title="E / Enter">🔨 Поставить</button>
   <button id="btn-jump" class="huge ghost" title="Пробел">🤸 Прыжок</button>
 </div>
+<div id="spin"><button id="spin-left" type="button" aria-label="Повернуть сцену влево">⟲</button><button id="spin-right" type="button" aria-label="Повернуть сцену вправо">⟳</button></div>
 <div id="joy"><i></i></div>
 <div id="toast"></div>
 <div id="loading"><div class="tail-spin">🛠</div><div id="load-text">Готовим поле…</div><div class="bar"><i id="load-bar"></i></div></div>

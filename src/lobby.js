@@ -12,17 +12,9 @@ const profile = me();
 if (!profile.name) profile.name = `Игрок ${Math.floor(10 + Math.random() * 89)}`;
 saveMe(profile);
 
-/* ── кто ты ── */
-$('name').value = profile.name;
-$('name').addEventListener('change', () => { profile.name = $('name').value.trim().slice(0, 14) || profile.name; saveMe(profile); rehello(); });
-const swatches = (host, list, key, render) => {
-  host.innerHTML = list.map((v) => `<button type="button" data-v="${v}" ${key === 'color' ? `style="background:${v}"` : ''}>${render(v)}</button>`).join('');
-  const mark = () => host.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === profile[key]));
-  host.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; profile[key] = b.dataset.v; saveMe(profile); mark(); rehello(); };
-  mark();
-};
-swatches($('colors'), COLORS, 'color', () => '');
-swatches($('emojis'), EMOJIS, 'emoji', (v) => v);
+/* ── кто ты: выбирается на странице профиля ── */
+$('me').textContent = `${profile.emoji} ${profile.name}`;
+$('me').style.setProperty('--c', profile.color);
 
 /* ── выбор карты и уровня ── */
 const my = myLevels.list();
@@ -79,7 +71,7 @@ function go() { net.close(); location.href = `play.html?room=${room.code}${qs.ha
 
 function showRoom() {
   $('room-panel').hidden = !room;
-  $('lobby-main').style.display = room ? 'none' : 'contents';
+  $('lobby-main').hidden = !!room;
   if (!room) return;
   $('room-code').textContent = room.code;
   $('room-where').textContent = `· ${mapName(room)} · ${levelName(room)}${room.pub ? '' : ' · только по коду'}`;

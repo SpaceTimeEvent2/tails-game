@@ -83,7 +83,7 @@ function makeBot(sim, pid, rng, cover) {
       }
     } else {
       let best = -1, cost = Infinity;
-      for (const [s, t] of sim.towers) if (t.owner === pid && t.upCost < cost) { best = s; cost = t.upCost; }
+      for (const [s, t] of sim.towers) if (t.upCost < cost) { best = s; cost = t.upCost; }   // растить можно любую подружку команды
       if (best >= 0 && cost <= p.shells) sim.act(pid, { k: 'up', s: best });
     }
     if (sim.time >= sim.danceReady && sim.enemies.some((e) => e.rem < 40) && rng() < 0.33) {
@@ -105,13 +105,14 @@ function coverFor(level, spots) {
 }
 
 /** Одна партия: n игроков-ботов на уровне, множители mult(n). */
-export function play(level, n, mult, seed) {
+export function play(level, n, mult, seed, { working = n } = {}) {
   const rng = mulberry32(seed);
   const spots = spotsOf(level);
   const players = Array.from({ length: n }, (_, i) => ({ id: i + 1 }));
   const sim = new Sim(level, { players, spots, rng, mult });
   const cover = coverFor(level, spots);
-  const bots = players.map((p) => makeBot(sim, p.id, mulberry32(seed * 31 + p.id), cover));
+  // working < n: остальные игроки в команде, но ничего не делают (отвлеклись, маленькие, ушли от экрана)
+  const bots = players.slice(0, working).map((p) => makeBot(sim, p.id, mulberry32(seed * 31 + p.id), cover));
   let called = false;
   while (!sim.over && sim.time < MAX_T) {
     for (const b of bots) b();
@@ -122,7 +123,12 @@ export function play(level, n, mult, seed) {
   let towers = 0, lv = 0;
   for (const t of sim.towers.values()) { towers++; lv += t.level; }
   const route = sim.maze ? sim.mz.routes[0].length : 0;
-  return { route, won: sim.won, tails: Math.max(0, sim.tails), wave: sim.wave, towers, avgLevel: towers ? lv / towers : 0, time: sim.time };
+  const team = [...sim.players.values()];
+  const towersOf = (id) => [...sim.towers.values()].filter((t) => t.owner === id).length;
+  const spread = Math.max(...team.map((p) => towersOf(p.id))) - Math.min(...team.map((p) => towersOf(p.id)));
+  const idleShells = team.reduce((v, p) => v + p.shells, 0) / team.length;
+  const noTowers = team.filter((p) => !towersOf(p.id)).length;
+  return { spread, idleShells, noTowers, route, won: sim.won, tails: Math.max(0, sim.tails), wave: sim.wave, towers, avgLevel: towers ? lv / towers : 0, time: sim.time };
 }
 
 function stats(level, n, mult, seeds = SEEDS) {
@@ -147,6 +153,30 @@ const meanHealth = (n, mult) => {
   for (const l of allLevels) h += stats(l, n, mult).health;
   return h / allLevels.length;
 };
+
+/* ─────────────────── командная игра в неидеальных условиях ─────────────────── */
+
+/** Команда из n, из которых реально играют working: победы и запас домика по всем уровням. */
+function stress() {
+  const seeds = Number(opt('--seeds', 8));
+  const scen = [[1, 1], [2, 2], [3, 3], [4, 4], [2, 1], [3, 2], [3, 1], [4, 3], [4, 2], [4, 1]];
+  const rows = [];
+  for (const [n, working] of scen) {
+    let won = 0, h = 0, games = 0, spread = 0, idle = 0, none = 0, worst = 1;
+    for (const l of allLevels) {
+      let lw = 0;
+      for (let s = 1; s <= seeds; s++) {
+        const r = play(l, n, (k) => TEAM[k], s * 7919 + n * 13 + working, { working });
+        games++; if (r.won) { won++; lw++; h += r.tails / START_TAILS; }
+        spread += r.spread; idle += r.idleShells; none += r.noTowers;
+      }
+      worst = Math.min(worst, lw / seeds);
+    }
+    rows.push([n, working, pct(won / games), pct(h / games), pct(worst), f1(spread / games), Math.round(idle / games), f1(none / games)]);
+    console.log(`игроков ${n}, играют ${working}: побед ${pct(won / games)}, запас ${pct(h / games)}, худший уровень ${pct(worst)}, разница по подружкам ${f1(spread / games)}, неистрачено ракушек у игрока ${Math.round(idle / games)}, игроков без подружек ${f1(none / games)}`);
+  }
+  return rows;
+}
 
 function fit() {
   const solo = meanHealth(1, () => TEAM[1]);
@@ -270,6 +300,30 @@ function report(file) {
    бисекция по 8 партий на точку) — он и используется в игре; общий \`hp\` из таблицы — для своих уровней
    из редактора.
 
+## Команда в жизни: не все играют одинаково
+
+Раньше волны считались по всем в команде, и стоило одному отвлечься, команда проигрывала всегда (0 % побед при любом составе,
+проверка: \`node tools/balance.mjs --stress\`). Теперь:
+
+* **Волны и доход считаются по тем, кто играет.** Кто не действовал \`IDLE_AFTER\` (30 с) — отошёл; перед каждой волной половина его ракушек
+  уходит команде, дохода он не получает. Вернулся — снова в команде.
+* **Подружку друга можно растить** на свои ракушки: нет плит — ракушки всё равно в деле. Подружку ушедшего можно и отправить домой.
+* **Первые 2 волны плита держится для друга**, у которого ещё нет ни одной подружки: первый не займёт всё поле.
+* **Большой команде запас** \`TEAM_EASE\` (×0.92 у троих, ×0.86 у четверых): договариваться труднее, а боты этого не знают.
+
+## Персонаж в бою (src/sim.js, HERO)
+
+| | |
+|---|---|
+| Жизни | 10 в начале, максимум 20, закончились — отдых 8 с, потом 5 жизней у домика (хвостики не страдают) |
+| Удар | стоит 1 жизнь, раз в 0.6 с, досягаемость 5.5; мимо — жизнь не сгорает |
+| Сила удара | тень −34 % здоровья, привидение −25 %, большая тень −8 %; в прыжке ×1.5 |
+| Убил персонаж | ракушек нет; жизни: тень +4, привидение +5, большая +15 |
+| Убила башня | ракушки всей команде, жизней нет |
+| Тени бьют | рядом с персонажем (3.2): −1 жизнь (большая −3), раз в 1.5 с; ударив, замирают на 0.35 с |
+
+Боты в симуляторе персонажем не пользуются, поэтому бой на цифры выше не влияет. Выгоднее всего добивать раненых башней: один удар вместо трёх.
+
 ## Множители (src/balance.js)
 
 ${md(['Игроков', 'hp', 'count', 'shells', 'bounty', 'bonus', 'прочность волны hp·count', 'доход команды с тени N·count·bounty'], multRows)}
@@ -373,7 +427,8 @@ function fitTeamLevels() {
   }
 }
 
-if (args.includes('--fit-team-levels')) fitTeamLevels();
+if (args.includes('--stress')) stress();
+else if (args.includes('--fit-team-levels')) fitTeamLevels();
 else if (args.includes('--fit-levels')) fitLevels();
 else if (args.includes('--fit')) fit();
 else if (args.includes('--solo')) {

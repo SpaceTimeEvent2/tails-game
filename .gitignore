@@ -10,3 +10,7 @@ android/local.properties
 keystore.properties
 .env
 *.log
+
+# готовые ролики и обработанный голос собираются скриптами tools/howto-*; в git только исходные реплики
+store/video/*
+!store/video/vo-raw/

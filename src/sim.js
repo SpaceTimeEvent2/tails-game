@@ -48,9 +48,23 @@ export const HP_GROW = 1.2;           // рост здоровья теней о
 export const WAVE_PAUSE = 4.5;          // секунд между волнами (авто-следующая)
 export const SHOT_SPEED = 30;           // скорость снаряда, ед/с
 export const DANCE_LEN = 5, DANCE_COOLDOWN = 22;
+export const IDLE_AFTER = 30;           // секунд без действий — игрок считается отошедшим, волны рассчитаны на тех, кто играет
+export const SHARE_PLATES_WAVES = 2;    // первые волны плита придерживается для друга, у которого ещё нет подружки
+
+/**
+ * Персонаж в бою. Смысл: тени можно убивать двумя способами, и у каждого своя цена.
+ *   башня убила — ракушки всей команде;
+ *   персонаж убил — ракушек нет, зато жизни ему (и удар сам стоит жизни, а тени бьют в ответ).
+ * Удар отнимает долю здоровья тени: так он полезен на любой волне, а добить раненую башней выгоднее всего.
+ */
+export const HERO = { lives: 10, maxLives: 20, revive: 5, downFor: 8, reach: 5.5, cool: 0.6, monsterReach: 3.2, monsterCool: 1.5, safe: 0.8,
+                      hit: 0.34, hitGhost: 0.25, hitBig: 0.08, airK: 1.5, gain: 4, gainGhost: 5, gainBig: 15,
+                      // персонаж-призрак растёт за ракушки, как замок: с каждой стадией длиннее рука и сильнее удар, но он и заметнее для монстров
+                      growCost: [60, 110, 200], growReach: 0.2, growHit: 0.25, growBig: 0.4 };
 
 /** Множитель здоровья теней для команды: свой у уровня (level.teamHp), иначе общий из TEAM. */
-export const teamHp = (level, m) => (m.n > 1 && level.teamHp ? level.teamHp[m.n - 2] : m.hp);
+const TEAM_EASE = { 2: 1, 3: 0.92, 4: 0.86 };   // чем больше команда, тем труднее договориться: боты при подборе этого не знают
+export const teamHp = (level, m) => (m.n > 1 && level.teamHp ? level.teamHp[m.n - 2] * TEAM_EASE[m.n] : m.hp);
 
 /** Волна n на уровне level при множителях команды m (для одного игрока все множители = 1). */
 export function waveInfo(n, level, m = teamMult(1)) {
@@ -195,14 +209,36 @@ export class Sim {
 
   /** Сколько игроков сейчас в команде (ушедшие не считаются) → множители. */
   get activeCount() { let n = 0; for (const p of this.players.values()) if (p.active) n++; return Math.max(1, n); }
-  get mult() { return this.multFn(this.activeCount); }
+  /** Те, кто реально играет: от их числа зависят волны и доход. Иначе отвлёкшийся друг делает игру непроходимой. */
+  get workingCount() { let n = 0; for (const p of this.players.values()) if (p.active && !p.idle) n++; return Math.max(1, n); }
+  get mult() { return this.multFn(this.workingCount); }
+
+  /** Перед волной: кто не действовал IDLE_AFTER секунд — отошёл. Если отошли все, считаем, что играют все. */
+  updateIdle() {
+    const team = [...this.players.values()].filter((p) => p.active);
+    const away = team.filter((p) => this.time - p.lastAct > IDLE_AFTER);
+    for (const p of team) {
+      const idle = away.length < team.length && away.includes(p);
+      if (idle && !p.idle) this.emit(['i', p.id, 1]);
+      p.idle = idle;
+    }
+    // половина ракушек отошедшего — тем, кто играет (вернётся — останется с другой половиной и снова будет получать доход)
+    const workers = team.filter((p) => !p.idle);
+    for (const p of team) {
+      if (!p.idle || !workers.length) continue;
+      const part = Math.floor(p.shells / 2 / workers.length);
+      for (const w of workers) { w.shells += part; p.shells -= part; }
+    }
+  }
+  towersOf(pid) { let n = 0; for (const t of this.towers.values()) if (t.owner === pid) n++; return n; }
 
   addPlayer({ id, name = '', color = '#ffd447', emoji = '🦊' }) {
     const old = this.players.get(id);
     if (old) { old.active = true; Object.assign(old, { name, color, emoji }); return old; }
     let n = 1; for (const p of this.players.values()) if (p.active) n++;
     const p = { id, name, color, emoji, active: true, shells: Math.round(this.level.shells * this.multFn(n).shells),
-                built: 0, kills: 0, x: 0, z: 0, ry: 0, run: 0 };
+                built: 0, kills: 0, x: 0, z: 0, ry: 0, run: 0, lastAct: this.time, idle: false,
+                hero: false, ghostHero: false, grow: 1, lives: HERO.lives, down: false, upAt: 0, hitReady: 0, safeUntil: 0 };
     // опоздавший получает ещё и половину бонусов уже пройденных волн — чтобы было на что строить
     if (this.wave > 0) for (let w = 1; w <= this.wave; w++) p.shells += Math.round(waveInfo(w, this.level, this.multFn(n)).bonus * 0.5);
     this.players.set(id, p);
@@ -261,10 +297,12 @@ export class Sim {
     if (!p || !p.active || !a || typeof a !== 'object') return { ok: false, err: 'кто это?' };
     if (a.k === 'pos') {                       // бегающий персонаж: только запоминаем, без событий
       if ([a.x, a.z, a.r].every(Number.isFinite)) {
-        p.x = Math.max(-70, Math.min(70, a.x)); p.z = Math.max(-70, Math.min(70, a.z)); p.ry = a.r; p.run = a.v ? 1 : 0;
+        p.x = Math.max(-70, Math.min(70, a.x)); p.z = Math.max(-70, Math.min(70, a.z)); p.ry = a.r; p.run = a.v ? 1 : 0; p.hero = true; if (a.g) p.ghostHero = true;
       }
       return { ok: true, quiet: true };
     }
+    p.lastAct = this.time;
+    if (p.idle) { p.idle = false; this.emit(['i', pid, 0]); }
     if (this.over && a.k !== 'more') return { ok: false, err: 'игра закончилась' };
     const spot = Number.isInteger(a.s) && a.s >= 0 && a.s < this.spots.length ? a.s : -1;
     switch (a.k) {
@@ -274,6 +312,12 @@ export class Sim {
         if (this.towers.has(spot)) return { ok: false, err: 'плита занята' };
         if (p.shells < f.cost) return { ok: false, err: 'не хватает ракушек' };
         if (this.maze) { const why = this.mazeFree(spot); if (why) return { ok: false, err: why }; }
+        else if (this.wave <= SHARE_PLATES_WAVES && this.towersOf(pid) > 0) {
+          let waiting = 0, free = 0;
+          for (const o of this.players.values()) if (o.id !== pid && o.active && !o.idle && !this.towersOf(o.id)) waiting++;
+          this.spots.forEach((sp, i) => { if (sp.ok && !this.towers.has(i)) free++; });
+          if (free <= waiting) return { ok: false, err: 'Оставь эту плиту другу!' };
+        }
         p.shells -= f.cost;
         p.built++;
         this.towers.set(spot, { id: a.f, owner: pid, level: 1, cool: 0, ...towerStats(a.f, 1) });
@@ -283,8 +327,7 @@ export class Sim {
       }
       case 'up': {
         const t = this.towers.get(spot);
-        if (!t) return { ok: false, err: 'плита пустая' };
-        if (t.owner !== pid) return { ok: false, err: 'это чужая подружка' };
+        if (!t) return { ok: false, err: 'плита пустая' };      // растить можно любую подружку команды: ракушки не лежат без дела
         if (p.shells < t.upCost) return { ok: false, err: 'не хватает ракушек' };
         p.shells -= t.upCost;
         Object.assign(t, towerStats(t.id, t.level + 1), { level: t.level + 1 });
@@ -294,11 +337,22 @@ export class Sim {
       case 'sell': {
         const t = this.towers.get(spot);
         if (!t) return { ok: false, err: 'плита пустая' };
-        if (t.owner !== pid) return { ok: false, err: 'это чужая подружка' };
+        if (t.owner !== pid && this.players.get(t.owner)?.active) return { ok: false, err: 'это подружка друга' };   // ушедшего — можно
         p.shells += Math.round(t.spent / 2);
         this.towers.delete(spot);
         if (this.maze) this.remaze();
         this.emit(['s', spot, pid]);
+        return { ok: true };
+      }
+      case 'hit': return this.strike(p, !!a.air);
+      case 'grow': {
+        if (!p.ghostHero) return { ok: false, err: 'Расти может только призрак' };
+        const cost = HERO.growCost[p.grow - 1];
+        if (cost === undefined) return { ok: false, err: 'Призрак уже самый большой' };
+        if (p.shells < cost) return { ok: false, err: 'не хватает ракушек' };
+        p.shells -= cost;
+        p.grow++;
+        this.emit(['G', pid, p.grow]);
         return { ok: true };
       }
       case 'wave':
@@ -321,8 +375,63 @@ export class Sim {
     }
   }
 
+  /** Удар персонажа: по ближайшей тени в досягаемости, стоит одну жизнь. В прыжке бьёт сильнее. */
+  strike(p, air) {
+    if (!p.hero || p.down) return { ok: false, quiet: true };
+    if (this.time < p.hitReady) return { ok: false, quiet: true };
+    let target = null, best = HERO.reach * (1 + HERO.growReach * (p.grow - 1));
+    for (const e of this.enemies) {
+      const d = Math.hypot(e.x - p.x, e.z - p.z);
+      if (d <= best) { best = d; target = e; }
+    }
+    if (!target) return { ok: false, err: 'Рядом нет монстра' };
+    p.hitReady = this.time + HERO.cool;
+    p.lives--;
+    const part = target.big ? HERO.hitBig : target.ghost ? HERO.hitGhost : HERO.hit;
+    target.hp -= target.maxHp * part * (air ? HERO.airK : 1) * (1 + HERO.growHit * (p.grow - 1));
+    target.heroBy = p.id;
+    target.lastBy = p.id;
+    this.emit(['m', target.id, p.id, p.lives]);
+    return { ok: true };
+  }
+
+  /** Тени бьют персонажа, оказавшегося рядом, и на миг останавливаются — за это время по ним работают башни. */
+  monstersAttack(dt) {
+    for (const p of this.players.values()) {
+      if (p.down && this.time >= p.upAt) {
+        p.down = false; p.lives = HERO.revive; p.safeUntil = this.time + HERO.safe * 3;
+        this.emit(['r', p.id]);
+      }
+    }
+    for (const e of this.enemies) {
+      if (e.stun > 0) e.stun -= dt;
+      if (e.hitCool > 0) { e.hitCool -= dt; continue; }
+      for (const p of this.players.values()) {
+        if (!p.active || !p.hero || p.down || this.time < p.safeUntil) continue;
+        if (Math.hypot(e.x - p.x, e.z - p.z) > HERO.monsterReach + HERO.growBig * (p.grow - 1)) continue;
+        p.lives -= e.big ? 3 : 1;
+        p.safeUntil = this.time + HERO.safe;
+        e.hitCool = HERO.monsterCool;
+        e.stun = 0.35;
+        this.emit(['h', p.id, Math.max(0, p.lives), e.id]);
+        break;
+      }
+    }
+  }
+
+  /** Жизни кончились — персонаж отдыхает и возвращается к домику. Домик от этого не страдает. */
+  heroesFall() {
+    for (const p of this.players.values()) {
+      if (p.hero && !p.down && p.lives <= 0) {
+        p.lives = 0; p.down = true; p.upAt = this.time + HERO.downFor;
+        this.emit(['o', p.id, HERO.downFor]);
+      }
+    }
+  }
+
   startWave(by = 0) {
     if (this.over || this.queue.length) return;
+    this.updateIdle();
     this.wave++;
     const w = waveInfo(this.wave, this.level, this.mult);
     const lanes = this.maze ? this.level.maze.spawns.length : this.paths.length;
@@ -391,7 +500,7 @@ export class Sim {
     const dancing = this.time < this.danceUntil;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      const k = (dancing ? 0.5 : 1) * (e.slow > 0 ? 0.45 : 1);
+      const k = (dancing ? 0.5 : 1) * (e.slow > 0 ? 0.45 : 1) * (e.stun > 0 ? 0 : 1);
       if (e.slow > 0) e.slow -= dt;
       const step = e.speed * k * dt;
       if (e.pi < 0) {
@@ -404,6 +513,8 @@ export class Sim {
       path.at(e.d, e);
       e.rem = path.length - e.d;
     }
+
+    this.monstersAttack(dt);
 
     for (const [spot, t] of this.towers) {
       t.cool -= dt;
@@ -429,10 +540,11 @@ export class Sim {
       if (d < 1.6) {
         e.hp -= s.damage;
         e.lastBy = s.owner;
+        e.heroBy = 0;                  // добила башня — награда ракушками
         if (s.slow) e.slow = 1.6;
         if (s.splash) {
           for (const o of this.enemies) {
-            if (o !== e && Math.hypot(o.x - e.x, o.z - e.z) < s.splash * 1.6) { o.hp -= s.damage * 0.5; o.lastBy = s.owner; }
+            if (o !== e && Math.hypot(o.x - e.x, o.z - e.z) < s.splash * 1.6) { o.hp -= s.damage * 0.5; o.lastBy = s.owner; o.heroBy = 0; }
           }
         }
         this.shots.splice(i, 1);
@@ -447,17 +559,25 @@ export class Sim {
       if (e.hp > 0) continue;
       this.enemies.splice(i, 1);
       this.kills++;
-      // награда за тень — каждому игроку команды (делимся, а не соревнуемся)
-      for (const p of this.players.values()) if (p.active) p.shells += e.bounty;
+      const hero = e.heroBy ? this.players.get(e.heroBy) : null;
+      let gain = 0;
+      if (hero) {                      // убил персонаж: ракушек нет, зато жизни
+        gain = e.big ? HERO.gainBig : e.ghost ? HERO.gainGhost : HERO.gain;
+        if (!hero.down) hero.lives = Math.min(HERO.maxLives, hero.lives + gain);
+      } else {
+        // награда за тень от башни — каждому игроку команды (делимся, а не соревнуемся)
+        for (const p of this.players.values()) if (p.active && !p.idle) p.shells += e.bounty;
+      }
       const killer = this.players.get(e.lastBy);
       if (killer) killer.kills++;
-      this.emit(['k', e.id, e.lastBy || 0]);
+      this.emit(['k', e.id, e.lastBy || 0, gain]);
     }
+    this.heroesFall();
 
     if (this.running && !this.queue.length && !this.enemies.length) {
       this.running = false;
       const bonus = waveInfo(this.wave, this.level, this.mult).bonus;
-      for (const p of this.players.values()) if (p.active) p.shells += bonus;
+      for (const p of this.players.values()) if (p.active && !p.idle) p.shells += bonus;
       if (this.wave >= this.level.target) this.finish(true);
       else { this.nextWaveAt = this.time + WAVE_PAUSE; this.emit(['c', this.wave, bonus]); }
     }
@@ -501,7 +621,7 @@ export class Sim {
       st: r1(this.spawnTimer), g: r2(this.gap), nw: this.nextWaveAt < 0 ? -1 : r1(this.nextWaveAt - this.time),
       du: r1(Math.max(0, this.danceUntil - this.time)), dr: r1(Math.max(0, this.danceReady - this.time)),
       ts: this.teamSize, k: this.kills, lk: this.leaks, ln: this.lane,
-      p: [...this.players.values()].map((p) => [p.id, p.shells, p.active ? 1 : 0, p.built, p.kills, r1(p.x), r1(p.z), r2(p.ry), p.run]),
+      p: [...this.players.values()].map((p) => [p.id, p.shells, p.active ? 1 : 0, p.built, p.kills, r1(p.x), r1(p.z), r2(p.ry), p.run, p.idle ? 1 : 0, r1(this.time - p.lastAct), p.lives, p.down ? r1(p.upAt - this.time) : 0, p.hero ? 1 : 0, p.grow, p.ghostHero ? 1 : 0]),
       tw,
       // тень: [id, дорожка (-1 — лабиринт), d|x, z, hp, maxHp, скорость×100, замедление, флаги, награда]
       e: this.enemies.map((e) => [e.id, e.pi, r1(e.pi < 0 ? e.x : e.d), e.pi < 0 ? r1(e.z) : 0, Math.round(e.hp), e.maxHp,
@@ -519,9 +639,10 @@ export class Sim {
     sim.danceUntil = s.t + s.du; sim.danceReady = s.t + s.dr; sim.teamSize = s.ts || 1;
     sim.kills = s.k || 0; sim.leaks = s.lk || 0; sim.lane = s.ln || 0;
     const info = new Map(players.map((p) => [p.id, p]));
-    for (const [id, shells, active, built, kills, x, z, ry] of s.p) {
+    for (const [id, shells, active, built, kills, x, z, ry, , idle, away, lives, downLeft, hero, grow, ghostHero] of s.p) {
       const pi = info.get(id) || {};
-      sim.players.set(id, { id, shells, active: !!active && info.has(id), built, kills, x: x || 0, z: z || 0, ry: ry || 0, run: 0,
+      sim.players.set(id, { id, shells, active: !!active && info.has(id), built, kills, x: x || 0, z: z || 0, ry: ry || 0, run: 0, idle: !!idle, lastAct: s.t - (away || 0),
+                            hero: !!hero, ghostHero: !!ghostHero, grow: grow || 1, lives: lives ?? HERO.lives, down: downLeft > 0, upAt: s.t + (downLeft || 0), hitReady: 0, safeUntil: 0,
                             name: pi.name || '', color: pi.color || '#ffd447', emoji: pi.emoji || '🦊' });
     }
     for (const [spot, fi, lvl, owner, cool] of s.tw) {
