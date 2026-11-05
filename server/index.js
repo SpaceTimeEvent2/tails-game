@@ -162,8 +162,9 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 });
 wss.on('connection', (ws, req) => {
   let me = null;
   let bucket = 60, last = Date.now();     // не больше ~40 сообщений в секунду с одного соединения
-  ws.isAlive = true;
-  ws.on('pong', () => { ws.isAlive = true; });
+  ws.missed = 0;
+  ws.on('pong', () => { ws.missed = 0; });
+  ws.on('message', () => { ws.missed = 0; });   // любое сообщение — тоже признак жизни
 
   ws.on('message', (buf) => {
     const now = Date.now();
@@ -287,11 +288,11 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// проверка живости: молчащие соединения закрываем (их место освободится через GRACE_MS)
+// проверка живости: соединение, молчащее 3 проверки подряд (~45 с), закрываем (место освободится через GRACE_MS).
+// Одной пропущенной мало: телефон с тяжёлой сценой или вкладка в фоне отвечает с задержкой.
 setInterval(() => {
   for (const ws of wss.clients) {
-    if (!ws.isAlive) { ws.terminate(); continue; }
-    ws.isAlive = false;
+    if (++ws.missed > 3) { log('нет ответа на ping 45 с — соединение закрыто'); ws.terminate(); continue; }
     ws.ping();
   }
 }, 15000).unref();

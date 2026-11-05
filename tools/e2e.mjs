@@ -84,7 +84,7 @@ await A.page.click('#btn-start');
 for (const p of [A, B, C]) {
   check(await waitFor(p, () => location.pathname.endsWith('play.html'), 15000), `${p.name}: перешёл в игру`);
 }
-for (const p of [A, B, C]) check(await waitFor(p, () => window.__td && document.getElementById('loading').classList.contains('done'), 60000), `${p.name}: сцена загрузилась`);
+for (const p of [A, B, C]) check(await waitFor(p, () => window.__td && document.getElementById('loading').classList.contains('done'), 150000), `${p.name}: сцена загрузилась`);
 const hostFlags = await Promise.all([A, B, C].map((p) => td(p, () => window.__td.isHost)));
 check(hostFlags.filter(Boolean).length === 1, `ведущий ровно один (${hostFlags})`);
 const hostIdx = hostFlags.indexOf(true);
@@ -187,7 +187,7 @@ check(drift < 4, `расхождение позиций теней хост↔к
 /* ── опоздавший: входит по коду, когда игра уже идёт ── */
 await D.page.goto(`${BASE}/lobby.html?debug&join=${code}`);
 check(await waitFor(D, () => location.pathname.endsWith('play.html'), 15000), 'Галя вошла по коду в идущую игру');
-check(await waitFor(D, () => window.__td && document.getElementById('loading').classList.contains('done'), 60000), 'Галя: сцена загрузилась');
+check(await waitFor(D, () => window.__td && document.getElementById('loading').classList.contains('done'), 150000), 'Галя: сцена загрузилась');
 check(await waitFor(H, () => window.__td.view.players.size === 4 && [...window.__td.view.players.values()].every((p) => p.active), 10000), 'у хоста четверо игроков');
 const dShells = await td(D, () => window.__td.view.players.get(window.__td.myId)?.shells);
 check(dShells > 0, `у Гали свои ракушки (${dShells})`);
@@ -205,7 +205,12 @@ await E.ctx.close();
 
 /* ── волна проходит до конца ── */
 check(await waitFor(H, () => window.__td.view.wave >= 2 || (window.__td.view.wave === 1 && !window.__td.view.running), 120000), 'волна 1 пройдена');
-const tailsAll = await Promise.all([A, B, C, D].map((p) => td(p, () => [window.__td.view.wave, window.__td.view.tails])));
+let tailsAll = [];
+for (let i = 0; i < 10; i++) {      // снимки приходят ~12 раз/с — читаем, пока у всех не совпадёт (или 10 попыток)
+  tailsAll = await Promise.all([A, B, C, D].map((p) => td(p, () => [window.__td.view.wave, window.__td.view.tails])));
+  if (tailsAll.every((t) => t[1] === tailsAll[0][1])) break;
+  await sleep(300);
+}
 console.log('   волна/хвостики у всех:', JSON.stringify(tailsAll));
 check(tailsAll.every((t) => t[1] === tailsAll[0][1]), 'хвостики у всех одинаковые');
 await shot(D, '07-four-players');

@@ -52,6 +52,9 @@ export class Net {
     ws.onmessage = (ev) => {
       let m;
       try { m = JSON.parse(ev.data); } catch (e) { return; }
+      // эту же вкладку-игрока открыли заново (например, лобби → игра): старое соединение не переподключаем,
+      // иначе два соединения выбивали бы друг друга по кругу
+      if (m.t === 'kicked') this.closedByUs = true;
       if (m.t === 'welcome') {
         this.id = m.id;
         setToken(m.token);
@@ -73,7 +76,8 @@ export class Net {
   send(m) {
     const s = JSON.stringify(m);
     if (this.ws && this.ws.readyState === 1 && this.id) this.ws.send(s);
-    else if (m.t !== 'act' && m.t !== 'snap') this.queue.push(s);
+    // пока переподключаемся — действия копим (построить/подрасти не должны теряться), позицию и снимки — нет
+    else if (m.t !== 'snap' && !(m.t === 'act' && m.a && m.a.k === 'pos') && this.queue.length < 50) this.queue.push(s);
   }
 
   close() { this.closedByUs = true; try { this.ws.close(); } catch (e) { /* */ } }
