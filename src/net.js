@@ -6,6 +6,7 @@
 export const COLORS = ['#ffd447', '#ff6f91', '#8fd0ff', '#9be37a', '#c7b0ff', '#ffa45c'];
 export const EMOJIS = ['🦊', '🐱', '🐬', '🐢', '🦄', '🐝', '🐙', '🐸', '🐼', '🦁', '🐵', '🐧', '🦉', '🦖', '🐰', '🐯'];
 export const HERO_IDS = ['dancer', 'maskot', 'ghost'];
+export const SHIP_IDS = ['wedge', 'arrow', 'delta'];          // корабль в гонке (src/ships.js)
 export const TINTS = ['', '#ff9dbb', '#8fd0ff', '#9be37a', '#ffe07a', '#c7b0ff', '#ffa45c', '#8b8fa8'];   // цвет поверх текстуры, '' — как есть
 
 export function me() {
@@ -17,6 +18,7 @@ export function me() {
     emoji: EMOJIS.includes(m.emoji) ? m.emoji : EMOJIS[0],
     hero: HERO_IDS.includes(m.hero) ? m.hero : HERO_IDS[0],
     tint: TINTS.includes(m.tint) ? m.tint : '',
+    ship: SHIP_IDS.includes(m.ship) ? m.ship : SHIP_IDS[0],
   };
 }
 export function saveMe(m) { try { localStorage.setItem('tg.me', JSON.stringify(m)); } catch (e) { /* */ } }

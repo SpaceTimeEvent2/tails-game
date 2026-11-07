@@ -10,8 +10,9 @@ import { Runner, Joystick, loadRunnerModel } from './runner.js';
 import { Net, me as myProfile, COLORS } from './net.js';
 import { MAPS, progress } from './levels.js';
 import { audio } from './audio.js';
-import { TUBE_R, buildTrack, sample, barAngle, newRacer, stepRacer, botInput, routeOf } from './race-sim.js';
+import { TUBE_R, buildTrack, sample, barAngle, newRacer, stepRacer, botInput, routeOf, fire, stepShot, shotHits, zap, botAims, worldAt, SHOT } from './race-sim.js';
 import { buildCourse, decode as decodeTrack, W as FIELD, CELL as FIELD_CELL } from './race-design.js';
+import { makeShip } from './ships.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -38,7 +39,7 @@ let def = null;
 if (ROOM) {
   $('load-text').textContent = `Входим в гонку ${ROOM}…`;
   net = new Net();
-  await net.connect({ name: profile.name || 'Игрок', color: profile.color, emoji: profile.emoji, hero: profile.hero, tint: profile.tint });
+  await net.connect({ name: profile.name || 'Игрок', color: profile.color, emoji: profile.emoji, hero: profile.hero, tint: profile.tint, ship: profile.ship });
   myId = net.id;
   room = await new Promise((resolve) => {
     const t = setTimeout(() => failPage(`Не получилось войти в гонку ${ROOM}`), 8000);
@@ -47,8 +48,10 @@ if (ROOM) {
     net.send({ t: 'join', code: ROOM });
   });
   isHost = room.host === myId;
-  def = MAPS.race.levels.find((l) => l.id === room.level);
-  if (!def) failPage('Эта трасса не открывается');
+  if (room.map !== 'track') {
+    def = MAPS.race.levels.find((l) => l.id === room.level);
+    if (!def) failPage('Эта трасса не открывается');
+  }
   $('btn-home').href = 'lobby.html';
   $('btn-home').addEventListener('click', () => net.send({ t: 'leave' }));
 } else if (!qs.get('code')) {
@@ -58,11 +61,11 @@ if (ROOM) {
 let course;
 if (def) course = { routes: [buildTrack(def)] };
 else {
-  const design = decodeTrack(qs.get('code'));
+  const design = decodeTrack(ROOM ? room.lv : qs.get('code'));
   course = design && buildCourse(design);
   if (!course) failPage('Эта трасса не открывается');
   def = course.def;
-  $('btn-home').href = 'races.html';
+  if (!ROOM) $('btn-home').href = 'races.html';
 }
 const track = course.routes[0];
 const draws = course.draw || track.obstacles.map((o) => ({ track, o }));
@@ -288,13 +291,13 @@ async function ensureHero(hero) {
   loaded.add(hero);
   try { await loadRunnerModel(loader, hero); } catch (e) { console.error(e); }
 }
-const flameGeo = new THREE.ConeGeometry(0.42, 1, 12);
+const flameGeo = new THREE.ConeGeometry(0.34, 1, 10);
 flameGeo.translate(0, 0.5, 0);
-flameGeo.rotateX(-Math.PI / 2);         // основание у ног, острие назад, по −Z
+flameGeo.rotateX(-Math.PI / 2);         // основание у двигателя, острие назад, по −Z
 
-/** Персонаж в полёте: лицом вниз, голова вперёд, руки в стороны, как крылья; из-под ног реактивная струя. */
+/** Гонщик: треугольный корабль, выбранный в профиле, в цвете игрока; из сопел бьют реактивные струи. */
 class Rider {
-  constructor({ id, color, name, hero, tint, isMe, racer, skill }) {
+  constructor({ id, color, name, hero, tint, ship, isMe, racer, skill }) {
     this.id = id; this.color = color; this.name = name; this.isMe = isMe; this.emoji = name;
     this.p = racer; this.skill = skill;
     this.r = new Runner(scene, { color, name: isMe ? '' : name, me: isMe, hero: loaded.has(hero) || hero === 'ghost' ? hero : 'dancer', tint });
@@ -302,11 +305,18 @@ class Rider {
     r.ring.visible = false;
     r.mixer.stopAllAction();
     r.walk = r.run = null;
-    r.body.rotation.x = Math.PI / 2;
-    r.body.position.z = -2.2;
-    if (r.label) r.label.position.y = 3.4;
-    this.flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
-    this.flame.position.z = -2.3;
+    r.body.visible = false;
+    const body = makeShip(ship, color, isMe ? 0xffffff : color);
+    r.root.add(body);
+    this.flame = new THREE.Group();
+    const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+    for (const [x, y, k] of body.userData.engines) {
+      const f = new THREE.Mesh(flameGeo, flameMat);
+      f.position.set(x, y, 0);
+      f.scale.set(k / 0.34, k / 0.34, 1);
+      this.flame.add(f);
+    }
+    this.flame.position.z = -2.1;
     r.root.add(this.flame);
     this.roll = 0; this.pitch = 0; this.yaw = 0;
     this.px = 0; this.py = 0; this.pz = 0;
@@ -333,6 +343,7 @@ class Rider {
     root.rotateZ(this.roll);
     this.flame.scale.set(1, 1, 0.5 + (v / def.vmax) * 2.2 * (0.85 + Math.random() * 0.3));
     this.r.update(dt);
+    if (this.r.label) this.r.label.position.y = 2.8;   // имя сразу над рубкой
   }
 }
 const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4();
@@ -352,9 +363,9 @@ const BOTS = def.bots || {
   3: [[0.12, 0.97, 0.85], [0.25, 0.92, 0.6], [0.35, 0.87, 0.5]],
 }[def.id] || [];
 const BOT_LOOK = [
-  { name: '🤖 Комета', color: '#ff6f91', hero: 'maskot', tint: '#ff9dbb' },
-  { name: '👾 Астра', color: '#8fd0ff', hero: 'ghost', tint: '#8fd0ff' },
-  { name: '🛸 Метеор', color: '#9be37a', hero: 'ghost', tint: '#9be37a' },
+  { name: '🤖 Комета', color: '#ff6f91', hero: 'maskot', tint: '#ff9dbb', ship: 'arrow' },
+  { name: '👾 Астра', color: '#8fd0ff', hero: 'ghost', tint: '#8fd0ff', ship: 'delta' },
+  { name: '🛸 Метеор', color: '#9be37a', hero: 'ghost', tint: '#9be37a', ship: 'wedge' },
 ];
 
 await ensureHero(profile.hero);
@@ -366,7 +377,7 @@ $('load-bar').style.width = '100%';
 
 function addMe() {
   const lane = ROOM ? Math.max(0, room.players.findIndex((p) => p.id === myId)) : 0;
-  const rider = new Rider({ id: myId, color: profile.color, name: `${profile.emoji} ${profile.name || 'Ты'}`, hero: profile.hero, tint: profile.tint, isMe: true, racer: newRacer(lane) });
+  const rider = new Rider({ id: myId, color: profile.color, name: `${profile.emoji} ${profile.name || 'Ты'}`, hero: profile.hero, tint: profile.tint, ship: profile.ship, isMe: true, racer: newRacer(lane) });
   riders.set(myId, rider);
   mine = rider;
 }
@@ -374,7 +385,7 @@ addMe();
 if (!ROOM) {
   BOTS.forEach(([miss, vmaxK, sloppy], i) => {
     const l = BOT_LOOK[i];
-    riders.set(-(i + 1), new Rider({ id: -(i + 1), color: l.color, name: l.name, hero: l.hero, tint: l.tint, racer: newRacer(i + 1), skill: { miss, vmaxK, sloppy, seed: i + 3 } }));
+    riders.set(-(i + 1), new Rider({ id: -(i + 1), color: l.color, name: l.name, hero: l.hero, tint: l.tint, ship: l.ship, racer: newRacer(i + 1), skill: { miss, vmaxK, sloppy, seed: i + 3 } }));
   });
 }
 function syncRoster() {
@@ -383,7 +394,7 @@ function syncRoster() {
     if (p.id === myId) continue;
     if (!riders.has(p.id)) {
       const lane = room.players.indexOf(p);
-      const rider = new Rider({ id: p.id, color: p.color, name: `${p.emoji} ${p.name}`, hero: p.hero, tint: p.tint, racer: newRacer(lane) });
+      const rider = new Rider({ id: p.id, color: p.color, name: `${p.emoji} ${p.name}`, hero: p.hero, tint: p.tint, ship: p.ship, racer: newRacer(lane) });
       rider.net = { s: rider.p.s, x: rider.p.x, y: rider.p.y, v: 0 };
       riders.set(p.id, rider);
     }
@@ -395,6 +406,89 @@ function syncRoster() {
 }
 syncRoster();
 
+/* ── выстрелы: каждый считает свои заряды и попадания по тем, кем управляет сам (своему персонажу и ботам) ── */
+const shots = [];
+const shotGeo = new THREE.CylinderGeometry(0.22, 0.22, 3.2, 8);
+shotGeo.rotateX(Math.PI / 2);
+const sparkGeo = new THREE.IcosahedronGeometry(1.2, 0);
+const sparks = [];
+let shotSeq = 0;
+const seenShots = new Set();
+const relay = [];                       // ведущий пересылает заряды всем через снимок
+function spawnShot(sh, color) {
+  sh.mesh = new THREE.Mesh(shotGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.35) }));
+  scene.add(sh.mesh);
+  shots.push(sh);
+}
+function spark(sh, color) {
+  const tr = routeOf(course, { route: sh.route });
+  const m = new THREE.Mesh(sparkGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.position.set(...worldAt(tr, sh.s, sh.x, sh.y));
+  m.life = 0.35;
+  scene.add(m);
+  sparks.push(m);
+}
+function shoot(rider) {
+  const sh = fire(rider.p, rider.id);
+  if (!sh) return false;
+  sh.id = `${myId}.${++shotSeq}`;
+  seenShots.add(sh.id);
+  spawnShot(sh, rider.color);
+  if (rider.isMe) {
+    audio.sfx('hop', 2.2);
+    if (net) {
+      const m = { k: 'shot', id: sh.id, s: Math.round(sh.s), x: +sh.x.toFixed(1), y: +sh.y.toFixed(1), v: Math.round(sh.v), r: sh.route };
+      if (isHost) relay.push({ ...m, from: myId, at: performance.now() }); else net.send({ t: 'act', a: m });
+    }
+  }
+  return true;
+}
+function remoteShot(m, from) {
+  if (from === myId || seenShots.has(m.id) || ![m.s, m.x, m.y, m.v, m.r].every(Number.isFinite)) return;
+  if (!course.routes[m.r]) return;
+  seenShots.add(m.id);
+  const r = riders.get(from);
+  spawnShot({ owner: from, route: m.r, s: m.s, x: m.x, y: m.y, v: m.v, t: 0, dead: null, id: m.id }, r ? r.color : '#ffffff');
+}
+function stepShots(dt) {
+  for (const sh of shots) {
+    if (sh.dead) continue;
+    stepShot(sh, course, raceT, dt);
+    if (sh.dead === 'wall') { spark(sh, '#ffffff'); continue; }
+    for (const r of riders.values()) {
+      if (r.id === sh.owner || r.p.fin || !shotHits(sh, r.p, course)) continue;
+      sh.dead = 'hit';
+      spark(sh, '#ffd447');
+      if (r.isMe || r.skill) {             // по своим — замедление, по чужим игрокам — у них самих
+        if ((r.p.zap || 0) <= 0) {
+          zap(r.p);
+          if (r.isMe) { audio.sfx('hurt'); camS.shake = 0.4; toast('💥 В тебя попали — замедление!', 1100); }
+        }
+      }
+      if (sh.owner === myId) { audio.sfx('hit'); toast('🎯 Попал!', 700); }
+      break;
+    }
+  }
+  for (let i = shots.length - 1; i >= 0; i--) if (shots[i].dead) { scene.remove(shots[i].mesh); shots[i].mesh.material.dispose(); shots.splice(i, 1); }
+}
+function drawShots(dt) {
+  const a = [0, 0, 0], b = [0, 0, 0];
+  for (const sh of shots) {
+    const tr = routeOf(course, { route: sh.route });
+    worldAt(tr, sh.s, sh.x, sh.y, a);
+    worldAt(tr, sh.s + 2, sh.x, sh.y, b);
+    sh.mesh.position.set(...a);
+    sh.mesh.lookAt(b[0], b[1], b[2]);
+  }
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const m = sparks[i];
+    m.life -= dt;
+    m.scale.setScalar(1 + (0.35 - m.life) * 6);
+    m.material.opacity = Math.max(0, m.life / 0.35);
+    if (m.life <= 0) { scene.remove(m); m.material.dispose(); sparks.splice(i, 1); }
+  }
+}
+
 /* ── ввод ── */
 const joy = new Joystick($('joy'));
 joy.floatIn(canvas, () => true, () => {});
@@ -402,6 +496,7 @@ const keys = new Set();
 let brakeHold = false;
 addEventListener('keydown', (e) => {
   if (/^(KeyW|KeyA|KeyS|KeyD|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Space|ShiftLeft|ShiftRight)$/.test(e.code)) { keys.add(e.code); e.preventDefault(); }
+  if ((e.code === 'KeyF' || e.code === 'KeyE' || e.code === 'Enter') && !e.repeat && state === 'go') shoot(mine);
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
@@ -411,6 +506,8 @@ addEventListener('blur', () => keys.clear());
   z.addEventListener('pointerdown', (e) => { e.preventDefault(); z.setPointerCapture(e.pointerId); set(true); });
   for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) z.addEventListener(n, () => set(false));
 }
+// огонь в момент касания: второй палец рулит джойстиком, и click браузер не пришлёт
+$('fire').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); if (state === 'go') shoot(mine); });
 const input = { x: 0, y: 0, brake: false };
 function readInput() {
   input.x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -447,9 +544,11 @@ function hostTick() {
   const left = goAt ? Math.max(0, Math.round(goAt - performance.now())) : -1;
   const pl = [...riders.values()].map((r) => {
     const q = r.isMe ? r.p : r.net;
-    return [r.id, Math.round(q.s), +q.x.toFixed(1), +q.y.toFixed(1), Math.round(q.v)];
+    return [r.id, Math.round(q.s), +q.x.toFixed(1), +q.y.toFixed(1), Math.round(q.v), q.route || 0];
   });
-  net.send({ t: 'snap', s: { left, pl, fin: finished } });
+  const now = performance.now();
+  while (relay.length && now - relay[0].at > 1200) relay.shift();
+  net.send({ t: 'snap', s: { left, pl, fin: finished, sh: relay.map(({ at, ...m }) => m) } });
   // все на связи долетели — комната закрыта для новых
   if (!hostTick.over && finished.length && room.players.filter((p) => p.online).every((p) => finished.some((f) => f.id === p.id))) {
     hostTick.over = true;
@@ -474,18 +573,23 @@ if (net) {
     if (a.k === 'rdy') ready.add(m.from);
     if (a.k === 'pos') {
       const r = riders.get(m.from);
-      if (r && r.net && [a.s, a.x, a.y, a.v].every(Number.isFinite)) Object.assign(r.net, { s: a.s, x: a.x, y: a.y, v: a.v });
+      if (r && r.net && [a.s, a.x, a.y, a.v].every(Number.isFinite)) Object.assign(r.net, { s: a.s, x: a.x, y: a.y, v: a.v, route: course.routes[a.r] ? a.r : 0 });
     }
     if (a.k === 'fin' && Number.isFinite(a.t)) markFinish(m.from, a.t);
+    if (a.k === 'shot' && typeof a.id === 'string' && a.id.length < 24) {
+      remoteShot(a, m.from);
+      if (isHost) relay.push({ k: 'shot', id: a.id, s: a.s, x: a.x, y: a.y, v: a.v, r: a.r, from: m.from, at: performance.now() });
+    }
   });
   net.on('snap', (m) => {
     const s = m.s || {};
     if (s.left >= 0 && (state === 'wait' || state === 'load')) startCount(s.left);
-    for (const [id, ss, x, y, v] of s.pl || []) {
+    for (const [id, ss, x, y, v, route] of s.pl || []) {
       const r = riders.get(id);
-      if (r && r.net) Object.assign(r.net, { s: ss, x, y, v });
+      if (r && r.net) Object.assign(r.net, { s: ss, x, y, v, route: course.routes[route] ? route : 0 });
     }
     for (const f of s.fin || []) markFinish(f.id, f.t);
+    for (const sh of s.sh || []) if (sh && typeof sh.id === 'string') remoteShot(sh, sh.from);
   });
   net.on('closed', (m) => { toast(m.msg, 6000); setTimeout(() => { location.href = 'lobby.html'; }, 2500); });
   net.on('kicked', (m) => toast(m.msg, 6000));
@@ -558,7 +662,14 @@ function step(dt) {
       botInput(r.p, course, raceT, r.skill, r.inp ||= { x: 0, y: 0, brake: false });
       const ev = stepRacer(r.p, r.inp, course, raceT, h, r.skill.vmaxK);
       if (ev.some(([e]) => e === 'fin')) markFinish(r.id, r.p.fin);
+      // бот стреляет реже игрока и не всегда: ловкий чаще
+      r.aimT = (r.aimT ?? 1.5 - r.id * 0.4) - h;
+      if (r.aimT <= 0 && botAims(r.p, [...riders.values()].map((q) => q.p))) {
+        r.aimT = 2.2 + Math.random() * 2.5 + r.skill.miss * 4;
+        shoot(r);
+      }
     }
+    stepShots(h);
   }
 }
 
@@ -582,8 +693,11 @@ function tick() {
     const vx = (q.x - p.x) * f / Math.max(dt, 1e-3), vy = (q.y - p.y) * f / Math.max(dt, 1e-3);
     p.s += (q.s - p.s) * f; p.x += (q.x - p.x) * f; p.y += (q.y - p.y) * f;
     q.s += q.v * dt; p.v = q.v; p.vx = vx; p.vy = vy;
+    if ((p.route || 0) !== (q.route || 0)) { p.route = q.route; p.s = q.s; p.x = q.x; p.y = q.y; }   // перешёл на другую ветку
   }
   for (const r of riders.values()) r.place(r.p.s, r.p.x, r.p.y, r.p.vx, r.p.vy, r.p.v, dt);
+  drawShots(dt);
+  $('fire').classList.toggle('cool', (mine.p.gun || 0) > 0);
   const sp = mine.p, spTrack = routeOf(course, sp);
   const nextFork = spTrack.forks[sp.nf || 0];
   if (nextFork && !sp.forkTold && nextFork.s - sp.s < Math.max(70, sp.v * 1.6)) { sp.forkTold = true; toast('🔀 Развилка: рули в нужную сторону!', 1800); setTimeout(() => { sp.forkTold = false; }, 3000); }
@@ -647,7 +761,7 @@ function tick() {
     if (sendT <= 0) {
       sendT = 0.1;
       if (isHost) hostTick();
-      else if (state === 'go' || state === 'done') net.send({ t: 'act', a: { k: 'pos', s: Math.round(sp.s), x: +sp.x.toFixed(1), y: +sp.y.toFixed(1), v: Math.round(sp.v) } });
+      else if (state === 'go' || state === 'done') net.send({ t: 'act', a: { k: 'pos', s: Math.round(sp.s), x: +sp.x.toFixed(1), y: +sp.y.toFixed(1), v: Math.round(sp.v), r: sp.route || 0 } });
       else if (state === 'wait') net.send({ t: 'act', a: { k: 'rdy' } });
     }
   }
@@ -666,5 +780,5 @@ if (ROOM) $('wait-host').classList.add('show');
 $('loading').classList.add('done');
 $('place-of').textContent = riders.size;
 tick();
-toast(matchMedia('(pointer: coarse)').matches ? 'Лети пальцем слева, справа — тормоз. Быстрее — сильнее заносит!' : 'WASD или стрелки — лететь, пробел — тормоз. Быстрее — сильнее заносит!', 3500);
-if (qs.has('debug')) window.__race = { riders, get mine() { return mine; }, get state() { return state; }, get track() { return routeOf(course, mine.p); }, course, finished, joy, camera, get raceT() { return raceT; }, get isHost() { return isHost; } };
+toast(matchMedia('(pointer: coarse)').matches ? 'Лети пальцем слева, справа — тормоз, 🔫 — стрелять: попадание замедляет!' : 'WASD или стрелки — лететь, пробел — тормоз, F — стрелять: попадание замедляет!', 3500);
+if (qs.has('debug')) window.__race = { riders, get mine() { return mine; }, get state() { return state; }, get track() { return routeOf(course, mine.p); }, course, finished, joy, camera, get raceT() { return raceT; }, get isHost() { return isHost; }, shots, shoot };

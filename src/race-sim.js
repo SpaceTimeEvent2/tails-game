@@ -190,6 +190,8 @@ export function stepRacer(p, input, course, t, dt, vmaxK = 1) {
   p.stun = Math.max(0, p.stun - dt);
   p.safe = Math.max(0, p.safe - dt);
   p.scrape = Math.max(0, p.scrape - dt);
+  p.gun = Math.max(0, (p.gun || 0) - dt);
+  p.zap = Math.max(0, (p.zap || 0) - dt);
   // стенка: скользим вдоль неё и теряем скорость
   const lim = TUBE_R - BODY_R, r = Math.hypot(p.x, p.y);
   if (r > lim) {
@@ -243,6 +245,57 @@ export function stepRacer(p, input, course, t, dt, vmaxK = 1) {
   if (!p.fin && p.s >= track.length) { p.fin = t; ev.push(['fin']); }
   if (p.s > track.total - 40) { p.s = track.total - 40; p.v = 0; }
   return ev;
+}
+
+/* ── выстрелы: заряд летит вдоль тоннеля быстрее стрелка, попадание замедляет, преграды заряд гасят ── */
+export const SHOT = { speed: 95, life: 2.2, cool: 1.1, hitR: 2.6, slow: 0.6 };
+
+/** Точка в мире по (s, x, y) на этой ветке. */
+export function worldAt(track, s, x, y, out = [0, 0, 0]) {
+  const P = sample(track, s, track.pos, _p), R = sample(track, s, track.right, _r), U = sample(track, s, track.up, _u);
+  for (let c = 0; c < 3; c++) out[c] = P[c] + R[c] * x + U[c] * y;
+  return out;
+}
+const _p = [0, 0, 0], _r = [0, 0, 0], _u = [0, 0, 0], _a = [0, 0, 0], _b = [0, 0, 0];
+
+/** Выстрел, если оружие остыло: заряд появляется перед носом. */
+export function fire(p, owner) {
+  if (p.gun > 0 || p.fin) return null;
+  p.gun = SHOT.cool;
+  return { owner, route: p.route || 0, s: p.s + 3, x: p.x, y: p.y, v: p.v + SHOT.speed, t: 0, dead: null };
+}
+
+/** Полёт заряда: dead = 'wall' (в преграду) или 'gone' (улетел). */
+export function stepShot(sh, course, t, dt) {
+  const tr = routeOf(course, { route: sh.route }), s0 = sh.s;
+  sh.s += sh.v * dt;
+  sh.t += dt;
+  for (const o of tr.obstacles) {
+    if (o.s > s0 && o.s <= sh.s && o.kind !== 'boost' && hits(o, sh.x, sh.y, t)) { sh.s = o.s; sh.dead = 'wall'; return; }
+  }
+  if (sh.t > SHOT.life || sh.s > tr.length + 60) sh.dead = 'gone';
+}
+
+/** Задел ли заряд гонщика (сравниваем точки в мире: ветки могут отличаться, а место одно). */
+export function shotHits(sh, p, course) {
+  if (Math.abs(p.s - sh.s) > 40) {   // быстрый отсев: на одной ветке s почти совпадают
+    if (!course.routes || (p.route || 0) === sh.route) return false;
+  }
+  worldAt(routeOf(course, { route: sh.route }), sh.s, sh.x, sh.y, _a);
+  worldAt(routeOf(course, p), p.s, p.x, p.y, _b);
+  return Math.hypot(_a[0] - _b[0], _a[1] - _b[1], _a[2] - _b[2]) < SHOT.hitR;
+}
+
+/** Попадание: скорость падает, а удар не повторяется сразу. */
+export function zap(p) { p.v *= SHOT.slow; p.zap = 0.8; }
+
+/** Бот стреляет, если кто-то впереди почти на одной линии. */
+export function botAims(p, others) {
+  for (const q of others) {
+    const ds = q.s - p.s;
+    if (q !== p && !q.fin && ds > 8 && ds < 150 && (q.route || 0) === (p.route || 0) && Math.hypot(q.x - p.x, q.y - p.y) < 2.2) return true;
+  }
+  return false;
 }
 
 /** Куда лететь, чтобы пройти преграду. */

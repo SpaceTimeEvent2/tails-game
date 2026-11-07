@@ -36,6 +36,7 @@ const flying = (page) => page.waitForFunction(() => window.__race.state === 'go'
   const { page, ctx } = await phone('меню');
   await page.goto(`${BASE}/index.html`);
   check(await page.$('[data-map="race"]') !== null, 'в меню есть карта «Гонка»');
+  check(await page.$('[data-map="quay"]') === null && await page.$('[data-map="castle"]') !== null, 'Набережной в главном меню нет, Замок есть');
   const fit = await page.$$eval('#maps a', (els) => els.every((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && r.width > 80; }));
   check(fit, 'все карточки карт в экране телефона');
   await page.screenshot({ path: path.join(SHOTS, 'race-menu.png') });
@@ -75,6 +76,36 @@ const flying = (page) => page.waitForFunction(() => window.__race.state === 'go'
   await touch('touchEnd', []);
   await sleep(200);
   await page.screenshot({ path: path.join(SHOTS, 'race-fly.png') });
+
+  // стреляем пальцем по боту впереди на той же линии
+  {
+    const target = await page.evaluate(() => {
+      const R = window.__race, m = R.mine.p, bot = [...R.riders.values()].find((r) => !r.isMe);
+      m.s = 150; m.x = 0; m.y = 0; m.v = 40; m.gun = 0; m.next = 0;
+      bot.p.s = 185; bot.p.x = 0.3; bot.p.y = 0; bot.p.v = 40; bot.p.zap = 0; bot.p.next = 0; bot.skill.miss = 1;
+      return bot.id;
+    });
+    const b = await page.$eval('#fire', (e) => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+    await touch('touchStart', [[300, 200, 1]]);
+    await touch('touchStart', [[300, 200, 1], [b[0], b[1], 2]]);
+    await sleep(60);
+    await touch('touchEnd', []);
+    const fired = await page.evaluate(() => window.__race.shots.length > 0 || window.__race.mine.p.gun > 0);
+    await page.waitForFunction((id) => window.__race.riders.get(id).p.zap > 0, { timeout: 4000 }, target).catch(() => {});
+    const z = await page.evaluate((id) => window.__race.riders.get(id).p.zap, target);
+    check(fired && z > 0, `кнопка «Огонь» вторым пальцем стреляет, бот впереди замедлен (${fired}, ${z.toFixed(2)})`);
+    await page.screenshot({ path: path.join(SHOTS, 'race-shot.png') });
+  }
+  // боты стреляют сами
+  {
+    const ok = await page.evaluate(async () => {
+      const R = window.__race, m = R.mine.p, bot = [...R.riders.values()].find((r) => !r.isMe);
+      bot.aimT = 0; bot.p.s = m.s - 30; bot.p.x = m.x; bot.p.y = m.y; bot.p.gun = 0;
+      await new Promise((r) => setTimeout(r, 300));
+      return bot.p.gun > 0;
+    });
+    check(ok, 'бот стреляет, если ты впереди на его линии');
+  }
 
   // врезаемся в первую преграду
   const hit = await page.evaluate(() => {

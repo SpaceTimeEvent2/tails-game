@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { me, saveMe, COLORS, EMOJIS, TINTS, HERO_IDS } from './net.js';
+import { me, saveMe, COLORS, EMOJIS, TINTS, HERO_IDS, SHIP_IDS } from './net.js';
+import { SHIPS, shipIcon, makeShip } from './ships.js';
 import { Runner, HEROES, loadRunnerModel } from './runner.js';
 
 const $ = (id) => document.getElementById(id);
@@ -37,6 +38,16 @@ async function draw() {
 }
 const save = () => { saveMe(profile); };
 
+/* корабль для гонки парит рядом с персонажем, в цвете кольца */
+let ship = null;
+function drawShip() {
+  if (ship) scene.remove(ship);
+  ship = makeShip(profile.ship, profile.color);
+  ship.scale.setScalar(0.5);
+  ship.position.set(2.1, 4.1, 0);
+  scene.add(ship);
+}
+
 const mark = (host, v) => host.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
 function pick(host, list, key, html, redraw) {
   host.innerHTML = list.map(html).join('');
@@ -48,12 +59,17 @@ function pick(host, list, key, html, redraw) {
     mark(host, profile[key]);
     save();
     if (redraw) draw();
+    drawShip();
   };
 }
 pick($('heroes'), HERO_IDS, 'hero', (v) => `<button type="button" data-v="${v}">${HEROES[v].emoji} ${HEROES[v].name}</button>`, true);
 pick($('tints'), TINTS, 'tint', (v) => (v ? `<button type="button" data-v="${v}" style="background:${v}" aria-label="цвет"></button>` : '<button type="button" data-v="" class="none" title="Как есть"></button>'), true);
 pick($('colors'), COLORS, 'color', (v) => `<button type="button" data-v="${v}" style="background:${v}" aria-label="кольцо"></button>`, true);
 pick($('emojis'), EMOJIS, 'emoji', (v) => `<button type="button" data-v="${v}">${v}</button>`, false);
+pick($('ships'), SHIP_IDS, 'ship', (v) => `<button type="button" data-v="${v}" title="${SHIPS[v].name}" aria-label="Корабль: ${SHIPS[v].name}">${shipIcon(v, profile.color)}</button>`, false);
+$('ships').addEventListener('click', () => { $('stage-hint').textContent = `Корабль в гонке: ${SHIPS[profile.ship].name}`; });
+$('colors').addEventListener('click', () => { $('ships').querySelectorAll('path').forEach((p) => p.setAttribute('fill', profile.color)); });
+drawShip();
 $('name').value = profile.name;
 $('name').addEventListener('input', () => { profile.name = $('name').value.trim().slice(0, 14); save(); });
 
@@ -68,8 +84,9 @@ function tick() {
   }
   const dt = Math.min(clock.getDelta(), 0.1);
   if (runner) { runner.yaw += dt * 0.5; runner.root.rotation.y = runner.yaw; runner.update(dt); }
+  if (ship) { ship.rotation.y += dt * 0.8; ship.position.y = 4.1 + Math.sin(performance.now() / 600) * 0.15; }
   renderer.render(scene, camera);
 }
 try { await draw(); } catch (e) { console.error(e); $('stage-hint').textContent = 'Не получилось загрузить персонажа'; }
 tick();
-if (qs.has('debug')) window.__pf = { profile, get runner() { return runner; } };
+if (qs.has('debug')) window.__pf = { profile, get runner() { return runner; }, get ship() { return ship; } };

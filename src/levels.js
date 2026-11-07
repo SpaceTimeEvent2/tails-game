@@ -243,7 +243,7 @@ export const RACE_LEVELS = [
 
 export const MAPS = {
   quay: {
-    id: 'quay', name: 'Набережная', emoji: '🎀', preview: 'assets/preview-tails.jpg',
+    id: 'quay', name: 'Набережная', emoji: '🎀', preview: 'assets/preview-tails.jpg', notInMenu: true,   // в главном меню не показываем; в командной игре и редакторе остаётся
     about: 'Десять мест Герцег-Нови: подружки на плитах не пускают тени к домику.', levels: LEVELS,
   },
   castle: {
@@ -253,7 +253,7 @@ export const MAPS = {
   },
   race: {
     id: 'race', name: 'Гонка', emoji: '🚀', preview: 'assets/preview-race.jpg', race: true,
-    about: 'Космический тоннель: лети как самолёт, разгоняйся и не вылети на вираже.',
+    about: 'Космический тоннель: лети на своём корабле, стреляй по соперникам и не вылети на вираже.',
     levels: RACE_LEVELS,
   },
   lab: {

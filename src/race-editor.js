@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { Joystick } from './runner.js';
 import { instantPress } from './touch-camera.js';
 import { apiBase } from './net.js';
-import { W, H, CELL, MAX_BLOCKS, BLOCKS, T, DIFFS, keyOf, xyzOf, inField, newDesign, encode, decode, analyze, trackName, myRaces } from './race-design.js';
+import { W, H, CELL, MAX_BLOCKS, BLOCKS, T, DIFFS, keyOf, xyzOf, inField, newDesign, encode, decode, analyze, autoComplete, trackName, myRaces } from './race-design.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -119,7 +119,9 @@ scene.add(cursor);
 
 /* ── инструменты: последний слот убирает ── */
 const ERASE = BLOCKS.length;
-const TIPS = ['Дорога: нажми на блок или на пол рядом', 'Старт: нажми на блок дороги', 'Финиш: нажми на блок дороги', 'Ворота: летишь в отверстие', 'Стена закрывает половину тоннеля', 'Вертушка вращается поперёк тоннеля', 'Камни: облетай', 'Ускоритель: лети сквозь него',
+const TIPS = ['Дорога: нажми на блок или на пол рядом', 'Старт: нажми на блок дороги', 'Финиш: нажми на блок дороги',
+  'Ворота: нажми на блок дороги — он станет воротами', 'Стена: нажми на блок дороги — он станет стеной', 'Вертушка: нажми на блок дороги — она встанет в нём',
+  'Камни: нажми на блок дороги — он станет камнями', 'Ускоритель: нажми на блок дороги — он станет ускорителем',
   'Развилка: поставь там, где ветки расходятся, и там, где сходятся', 'Убрать: нажми на блок'];
 let tool = T.path;
 function setTool(i) {
@@ -175,11 +177,13 @@ function refresh(changed = true) {
   st.classList.toggle('bad', !analysis.ok);
   if (analysis.ok) st.textContent = `✅ Готова: ${analysis.length} м${analysis.routes.length > 1 ? `, путей ${analysis.routes.length}` : ''}`;
   else st.textContent = analysis.errors[0];
+  fixOps = analysis.ok ? null : autoComplete(design);
+  $('btn-fix').hidden = !fixOps;
   $('btn-name').textContent = trackName(design);
   $('btn-diff').textContent = DIFFS[design.d].name;
   if (changed) { published = false; if (saveTimer === null) saveTimer = setTimeout(save, 300); }
 }
-let saveTimer = null, published = false;
+let saveTimer = null, published = false, fixOps = null;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
@@ -203,6 +207,11 @@ function apply(hit, erase = false) {
   } else {
     let k = hit.block;
     const replacing = tool !== T.path && k !== null;   // преграда, старт и финиш встают вместо блока, дорога — рядом с ним
+    // преграда — это кусок тоннеля: сверху на блок её не ставят, а старт, финиш и развилку она бы сломала
+    if (replacing && BLOCKS[tool].kind && [T.start, T.finish, T.fork].includes(blocks.get(k))) {
+      toast(`${BLOCKS[tool].icon} Ставь на синий блок дороги: ${BLOCKS[blocks.get(k)].name.toLowerCase()} заменять нельзя`, 2600);
+      return;
+    }
     if (!replacing) {
       if (!hit.next || !inField(...hit.next)) { toast('Здесь край поля'); return; }
       k = keyOf(...hit.next);
@@ -216,6 +225,8 @@ function apply(hit, erase = false) {
   undoStack.push(ops);
   if (undoStack.length > 300) undoStack.shift();
   refresh();
+  const b = BLOCKS[tool];
+  if (b && b.kind && ops.length === 1 && ops[0][1] >= 0) toast(`${b.icon} Здесь теперь ${b.name.toLowerCase()}`, 1200);
 }
 function undo() {
   const ops = undoStack.pop();
@@ -224,12 +235,31 @@ function undo() {
   refresh();
 }
 $('btn-undo').onclick = undo;
+$('btn-save').onclick = () => {
+  if (!blocks.size) { toast('Пока нечего сохранять'); return; }
+  save();
+  toast('💾 Сохранено в «Мои трассы»');
+};
+$('btn-fix').onclick = () => {
+  if (!fixOps) return;
+  if (blocks.size + fixOps.length > MAX_BLOCKS) { toast(`Больше ${MAX_BLOCKS} блоков нельзя`); return; }
+  const ops = [];
+  for (const [k, t] of fixOps) setBlock(k, t, ops);
+  undoStack.push(ops);
+  refresh();
+  toast(`🪄 Достроил ${ops.length} ${ops.length < 5 ? 'блока' : 'блоков'}. Не нравится — нажми ↩️`, 2600);
+};
 $('btn-name').onclick = () => { design.a = Math.floor(Math.random() * 16); design.b = Math.floor(Math.random() * 16); refresh(); };
 $('btn-diff').onclick = () => { const ids = Object.keys(DIFFS); design.d = ids[(ids.indexOf(design.d) + 1) % ids.length]; refresh(); };
 $('btn-fly').onclick = () => {
   if (!analysis.ok) { toast(analysis.errors[0]); return; }
   save();
   location.href = `race.html?code=${encodeURIComponent(encode(design))}&edit=${encodeURIComponent(saveId)}${qs.has('debug') ? '&debug' : ''}`;
+};
+$('btn-team').onclick = () => {
+  if (!analysis.ok) { toast(analysis.errors[0]); return; }
+  save();
+  location.href = `lobby.html?map=track&code=${encodeURIComponent(encode(design))}${qs.has('debug') ? '&debug' : ''}`;
 };
 $('btn-pub').onclick = async () => {
   if (!analysis.ok) { toast(analysis.errors[0]); return; }

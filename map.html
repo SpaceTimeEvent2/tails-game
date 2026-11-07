@@ -20,7 +20,7 @@
 </main>
 <script type="module">
 import { mapById, progress } from './src/levels.js';
-import { myLevels, decode, isMine, EW, EH } from './src/custom.js';
+import { myLevels, decode, isMine, analyze, EW, EH } from './src/custom.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const mapId = new URLSearchParams(location.search).get('map');
@@ -48,13 +48,14 @@ function showMine() {
   grid.innerHTML = list.map((it) => {
     const d = decode(it.code);
     if (!d) return '';
-    const mine = isMine(d);
+    const mine = isMine(d), ready = analyze(d).ok;
+    // черновик открывается в редакторе: играть в недоделанный уровень нельзя
     return `<div class="lvl mine-lvl" style='--img:${miniMap(d)}'>
-      <a class="fill" href="play.html?my=${esc(it.id)}" aria-label="Играть: ${esc(it.name)}" data-my="${esc(it.id)}"></a>
+      <a class="fill" href="${ready ? `play.html?my=${esc(it.id)}` : `editor.html?edit=${esc(it.id)}`}" aria-label="${ready ? 'Играть' : 'Доделать'}: ${esc(it.name)}" data-my="${esc(it.id)}"></a>
       <span class="name">${esc(it.name)}</span>
       ${mine ? `<a class="edit" href="editor.html?edit=${esc(it.id)}" title="Изменить" aria-label="Изменить: ${esc(it.name)}">✏️</a>`
              : `<button class="edit" type="button" data-copy="${esc(it.id)}" title="Скопировать себе, чтобы менять" aria-label="Скопировать: ${esc(it.name)}">📄</button>`}
-      <span class="meta">${mine ? '▶ Играть' : `🔒 ${esc(d.authorName || 'чужой')}`} · волн ${d.target}</span></div>`;
+      <span class="meta">${!ready ? '✏️ Черновик' : mine ? '▶ Играть' : `🔒 ${esc(d.authorName || 'чужой')}`} · волн ${d.target}</span></div>`;
   }).join('') + `<a class="lvl add" href="editor.html?new=1"><span class="plus">＋</span><span class="name">Новый уровень</span></a>`;
 }
 

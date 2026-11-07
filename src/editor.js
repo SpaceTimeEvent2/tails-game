@@ -227,12 +227,29 @@ function current() {
   return { ...design, author: design.author || authorId(), authorName: design.authorName || authorName(), name: $('name').value.trim() || 'Мой уровень', cells: cells.join(''), friends: picked.slice(), ghosts: ghostMode,
            target: Math.max(3, Math.min(25, Number($('target').value) || 8)), diff: $('diff').value, theme: $('theme').value };
 }
-let lastA = null;
+let lastA = null, baseline = null, autoT = 0;
+/** Автосохранение: любая правка своего уровня через секунду сама попадает в «Мои уровни»; недоделанный — как черновик. */
+function autoSave() {
+  if (readOnly || !lastA) return;
+  const item = myLevels.save(current());
+  design.id = item.id;
+  baseline = encode(current());
+  try { localStorage.setItem('tg.editor.draft', JSON.stringify(design)); } catch (e) { /* */ }
+  renderMine();
+  $('btn-save').textContent = lastA.ok ? '✓ Сохранено' : '✓ Черновик';
+}
 function changed() {
   design = current();
   try { localStorage.setItem('tg.editor.draft', JSON.stringify(design)); } catch (e) { /* */ }
   const a = analyze(design);
   lastA = a;
+  const code = encode(design);
+  if (baseline === null) baseline = code;          // только что открыли — это ещё не правка
+  else if (code !== baseline) {
+    $('btn-save').textContent = '💾 Сохранить';
+    clearTimeout(autoT);
+    if (!readOnly) autoT = setTimeout(autoSave, 1000);
+  }
   dots.clear();
   for (const p of a.paths) {
     for (let i = 0; i < p.length - 1; i++) {
@@ -300,10 +317,16 @@ $('btn-copy').onclick = () => {
 };
 
 function save() {
-  if (!lastA || !lastA.ok) { toast('Сначала почини уровень — смотри подсказку'); return null; }
+  if (!lastA) return null;
+  if (!lastA.ok) {                    // недоделанный уровень тоже не теряется: лежит черновиком
+    if (!readOnly) { autoSave(); toast(`💾 Черновик сохранён. Чтобы играть: ${lastA.errors[0]}`, 3000); }
+    return null;
+  }
   const item = myLevels.save(current());
   design.id = item.id;
   changed();
+  baseline = encode(current());
+  $('btn-save').textContent = '✓ Сохранено';
   renderMine();
   toast(`💾 Сохранено в «Мои уровни»: ${item.name}`);
   return item;
@@ -340,6 +363,8 @@ $('btn-import').onclick = () => {
 $('btn-new').onclick = () => { load({ ...sampleDesign(), cells: emptyCells(), name: 'Новый уровень' }); toast('Чистое поле — рисуй!'); };
 
 function load(d) {
+  baseline = null;
+  clearTimeout(autoT);
   design = { ...d };
   delete design.id;
   if (d.id) design.id = d.id;
@@ -368,9 +393,9 @@ $('r-save').onclick = () => (readOnly ? $('btn-copy').click() : save());
 function renderMine() {
   const list = myLevels.list();
   $('mine').innerHTML = list.length ? list.map((x) => {
-    const d = decode(x.code), mine = !d || isMine(d);
-    return `<div class="it" data-id="${x.id}"><span>${mine ? '' : '🔒 '}${x.name.replace(/[<>&]/g, '')}</span>
-    <button data-a="play" title="Играть">▶</button><button data-a="edit" title="${mine ? 'Открыть' : 'Посмотреть'}">${mine ? '✏️' : '👁'}</button>${mine ? '' : '<button data-a="copy" title="Скопировать себе">📄</button>'}<button data-a="del" title="Удалить">🗑</button></div>`;
+    const d = decode(x.code), mine = !d || isMine(d), ready = d && analyze(d).ok;
+    return `<div class="it" data-id="${x.id}"><span>${mine ? '' : '🔒 '}${ready ? '' : '✏️ '}${x.name.replace(/[<>&]/g, '')}${ready ? '' : ' <small>(черновик)</small>'}</span>
+    ${ready ? '<button data-a="play" title="Играть">▶</button>' : ''}<button data-a="edit" title="${mine ? 'Открыть' : 'Посмотреть'}">${mine ? '✏️' : '👁'}</button>${mine ? '' : '<button data-a="copy" title="Скопировать себе">📄</button>'}<button data-a="del" title="Удалить">🗑</button></div>`;
   }).join('')
     : '<div style="color:#9fc0d0;font-size:14px">Пока пусто. Нарисуй уровень и нажми «Сохранить».</div>';
 }
@@ -385,6 +410,7 @@ $('mine').onclick = (e) => {
 };
 renderMine();
 setReadOnly();
+baseline = encode(current());          // исходный уровень запоминаем сразу: правка до загрузки персонажа тоже сохранится
 
 function toast(text, ms = 2200) {
   const el = $('toast');

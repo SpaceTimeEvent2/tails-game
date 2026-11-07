@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { MAPS } from '../src/levels.js';
 import { decode, toLevel } from '../src/custom.js';
-import { decode as decodeTrack, analyze as analyzeTrack, encode as encodeTrack } from '../src/race-design.js';
+import { decode as decodeTrack, analyze as analyzeTrack, encode as encodeTrack, trackName } from '../src/race-design.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT || 8795);
@@ -166,7 +166,7 @@ function roomView(r) {
     code: r.code, map: r.map, level: r.level, lv: r.lv, levelName: r.levelName, pub: r.pub, ff: !!r.ff, status: r.status, host: r.host,
     players: r.order.map((tok) => {
       const p = people.get(tok);
-      return { id: p.id, name: p.name, color: p.color, emoji: p.emoji, hero: p.hero, tint: p.tint, online: !!p.ws };
+      return { id: p.id, name: p.name, color: p.color, emoji: p.emoji, hero: p.hero, tint: p.tint, ship: p.ship, online: !!p.ws };
     }),
   };
 }
@@ -259,6 +259,7 @@ wss.on('connection', (ws, req) => {
       me.emoji = clean(m.emoji, 4) || '🦊';
       me.hero = ['dancer', 'maskot', 'ghost'].includes(m.hero) ? m.hero : 'dancer';
       me.tint = COLOR.test(m.tint) ? m.tint : '';
+      me.ship = ['wedge', 'arrow', 'delta'].includes(m.ship) ? m.ship : 'wedge';
       clearTimeout(me.timer);
       send(ws, { t: 'welcome', id: me.id, token });
       const r = rooms.get(me.room);
@@ -282,6 +283,10 @@ wss.on('connection', (ws, req) => {
           const d = typeof m.lv === 'string' && m.lv.length < 3000 ? decode(m.lv) : null;
           level = d && toLevel(d);
           if (level) { map = { id: 'custom' }; lv = m.lv; }
+        }
+        if (m.map === 'track') {           // своя трасса гонки из конструктора: проверяем так же, как при публикации
+          const d = typeof m.lv === 'string' && m.lv.length < 4000 ? decodeTrack(m.lv) : null;
+          if (d && analyzeTrack(d).ok) { level = { id: 0, name: trackName(d) }; map = { id: 'track' }; lv = encodeTrack(d); }
         }
         if (!level) { send(ws, { t: 'error', msg: 'Нет такого уровня' }); break; }
         if (rooms.size >= MAX_ROOMS) { send(ws, { t: 'error', msg: 'Сервер занят, попробуй позже' }); break; }

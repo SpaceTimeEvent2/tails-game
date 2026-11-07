@@ -40,9 +40,9 @@ const prof = me();
 const meEl = document.getElementById('me');
 meEl.textContent = `${prof.emoji} ${prof.name || 'Мой персонаж'}`;
 meEl.style.setProperty('--c', prof.color);
-let last = 'quay';
-try { last = localStorage.getItem('tails.choice') || 'quay'; } catch (e) { /* */ }
-document.getElementById('maps').innerHTML = Object.values(MAPS).filter((m) => !m.hidden).map((m) => {
+let last = 'castle';
+try { last = localStorage.getItem('tails.choice') || 'castle'; } catch (e) { /* */ }
+document.getElementById('maps').innerHTML = Object.values(MAPS).filter((m) => !m.hidden && !m.notInMenu).map((m) => {
   const stars = progress.totalStars(m.id), max = m.levels.length * 3;
   return `<a class="choice${m.id === last ? ' last' : ''}" href="map.html?map=${m.id}" data-map="${m.id}">
     ${m.id === last ? '<span class="badge">в прошлый раз</span>' : ''}
@@ -58,6 +58,8 @@ document.getElementById('maps').innerHTML = Object.values(MAPS).filter((m) => !m
     <span class="about">${n ? 'Твои карты: играй и правь их' : 'Создай первую карту, и она появится здесь'}</span>
     <span class="meta">${n ? `Сохранено: ${n}` : 'Пока пусто'}</span></a>`;
 })();
+// столько колонок, сколько карточек: без пустого места, когда карт меньше (Набережной в меню нет)
+{ const el = document.getElementById('maps'); if (innerWidth > innerHeight) el.style.gridTemplateColumns = `repeat(${el.children.length}, minmax(0, 1fr))`; }
 </script>
 </body>
 </html>

@@ -149,6 +149,67 @@ export function analyze(design) {
   return { ok: !errors.length, errors, routes, used, length: Math.max(...routes.map((r) => r.chain.length)) * CELL };
 }
 
+/* ── «Достроить»: дорога от конца построенного к финишу, а если финиша нет — несколько блоков вперёд и финиш ── */
+
+/** Список [ключ, тип] новых блоков или null, если достроить нельзя (тогда кнопки нет). */
+export function autoComplete(design) {
+  const b = design.blocks;
+  const starts = [...b].filter(([, t]) => t === T.start).map(([k]) => k);
+  const fins = [...b].filter(([, t]) => t === T.finish).map(([k]) => k);
+  if (starts.length !== 1 || fins.length > 1) return null;
+  const S = starts[0], F = fins[0];
+  const near = (k) => DIRS.map((_, i) => step(k, i)).filter((n) => n >= 0);
+  // от старта по блокам: самый дальний блок — конец построенной дороги
+  const dist = new Map([[S, 0]]), from = new Map(), q = [S];
+  while (q.length) {
+    const k = q.shift();
+    for (const n of near(k)) if (b.has(n) && !dist.has(n)) { dist.set(n, dist.get(k) + 1); from.set(n, k); q.push(n); }
+  }
+  if (F !== undefined && dist.has(F)) return null;          // финиш уже связан: не хватает чего-то другого
+  let tip = S;
+  for (const [k, d] of dist) if (d > dist.get(tip)) tip = k;
+  const free = (k, ok) => !b.has(k) && near(k).every((n) => !b.has(n) || ok(n));
+  const ops = [];
+  if (F !== undefined) {
+    const goal = new Set([F]);
+    for (let g = [F]; g.length;) { const k = g.pop(); for (const n of near(k)) if (b.has(n) && !goal.has(n) && !dist.has(n)) { goal.add(n); g.push(n); } }
+    // сперва дорога, которая не касается чужих блоков; не вышло — любая
+    for (const strict of [true, false]) {
+      const ok = (n) => !strict || n === tip || goal.has(n);
+      const prev = new Map(), open = [];
+      for (const n of near(tip)) if (free(n, ok)) { prev.set(n, -1); open.push(n); }
+      let end = -1;
+      while (open.length && end < 0) {
+        const k = open.shift();
+        if (near(k).some((n) => goal.has(n))) { end = k; break; }
+        for (const n of near(k)) if (!prev.has(n) && free(n, ok)) { prev.set(n, k); open.push(n); }
+      }
+      if (end < 0) continue;
+      for (let k = end; k >= 0; k = prev.get(k)) ops.push([k, T.path]);
+      return ops.reverse();
+    }
+    return null;
+  }
+  // финиша нет: продолжаем прямо, у края или препятствия поворачиваем, последний блок — финиш
+  const [tx, ty, tz] = xyzOf(tip), base = from.has(tip) ? xyzOf(from.get(tip)) : [tx, ty, tz - 1];
+  let dir = DIRS.findIndex((d) => d[0] === tx - base[0] && d[1] === ty - base[1] && d[2] === tz - base[2]);
+  if (dir < 0 || dir > 3) dir = 2;
+  const want = Math.max(4, MIN_BLOCKS + 4 - (dist.get(tip) + 1));
+  const used = new Set([tip]);
+  let k = tip;
+  for (let i = 0; i < want; i++) {
+    const order = [dir, ...[0, 1, 2, 3].filter((d) => d !== dir)];
+    const n = order.map((d) => [d, step(k, d)]).find(([, c]) => c >= 0 && free(c, (m) => used.has(m) || m === k) && !used.has(c));
+    if (!n) break;
+    [dir, k] = n;
+    used.add(k);
+    ops.push([k, T.path]);
+  }
+  if (!ops.length) return null;
+  ops[ops.length - 1][1] = T.finish;
+  return ops;
+}
+
 /* ── трасса для гонки ── */
 
 /** Ось по блокам: сглаженная кубическим B-сплайном, поэтому лесенка становится подъёмом, а угол — виражом. */

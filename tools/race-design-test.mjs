@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Трассы из блоков без графики: код, развилки и слияния, змейка, примеры, боты не пролетают сквозь преграды. node tools/race-design-test.mjs */
-import { EXAMPLES, analyze, buildCourse, decode, encode, keyOf, trackName, T, DIFFS, CELL } from '../src/race-design.js';
-import { newRacer, stepRacer, botInput, hits, routeOf, TUBE_R, BODY_R } from '../src/race-sim.js';
+import { EXAMPLES, analyze, autoComplete, buildCourse, decode, encode, keyOf, trackName, T, DIFFS, CELL } from '../src/race-design.js';
+import { newRacer, stepRacer, botInput, hits, routeOf, fire, stepShot, shotHits, zap, botAims, TUBE_R, BODY_R } from '../src/race-sim.js';
 
 let fails = 0;
 const check = (ok, what) => { console.log(`${ok ? '✔' : '✘'} ${what}`); if (!ok) fails++; };
@@ -92,6 +92,51 @@ for (const d of EXAMPLES) {
   });
   const lateral = f.opts.filter((q) => Math.hypot(q.dx, q.dy) > 1);
   check(lateral.length > 0 && results.filter(([got, want]) => got === want).length >= lateral.length, `руль выбирает ветку: ${JSON.stringify(results)}`);
+}
+/* «Достроить» */
+{
+  const fill = (b) => { const ops = autoComplete({ blocks: b }); if (!ops) return [null, null]; const c = new Map(b); for (const [k, t] of ops) c.set(k, t); return [ops, analyze({ blocks: c })]; };
+  // только старт и пара блоков: достраивает до финиша
+  const b1 = new Map(); b1.set(keyOf(5, 0, 5), T.start); line(b1, [5, 0, 5], [1, 0, 0], 2);
+  const [o1, a1] = fill(b1);
+  check(o1 && a1.ok && o1[o1.length - 1][1] === T.finish, `без финиша: дорога продолжена и поставлен финиш (${o1?.length} блоков, ${a1?.errors})`);
+  // у края поля поворачивает
+  const b2 = new Map(); b2.set(keyOf(29, 0, 3), T.start); line(b2, [29, 0, 3], [1, 0, 0], 2);
+  const [o2, a2] = fill(b2);
+  check(o2 && a2.ok, `у края поля поворачивает (${a2?.errors})`);
+  // разрыв: дорога и финиш есть, между ними дыра
+  const b3 = new Map(); b3.set(keyOf(2, 0, 2), T.start); let c = line(b3, [2, 0, 2], [1, 0, 0], 6);
+  let e = line(b3, [12, 0, 6], [1, 0, 0], 4); b3.set(keyOf(...e), T.finish);
+  const [o3, a3] = fill(b3);
+  check(o3 && a3.ok, `разрыв соединён: ${o3?.length} блоков, путь ${a3?.routes[0]?.chain.length}`);
+  // готовая трасса — кнопки нет
+  check(autoComplete(EXAMPLES[0]) === null, 'у готовой трассы «Достроить» нет');
+}
+
+/* выстрелы */
+{
+  const course = buildCourse(EXAMPLES[0]), tr = course.routes[0];
+  const a = { ...newRacer(0), s: 100, x: 0, y: 0, v: 50, next: 0 }, b = { ...newRacer(1), s: 140, x: 0.5, y: 0, v: 50, next: 0 };
+  while (a.next < tr.obstacles.length && tr.obstacles[a.next].s < a.s) a.next++;
+  b.next = a.next;
+  const free = { ...course, routes: [{ ...tr, obstacles: [] }] };
+  const sh = fire(a, 'a');
+  check(sh && fire(a, 'a') === null, 'выстрел есть, второй сразу нельзя: оружие остывает');
+  let hit = false;
+  for (let t = 0; t < 2 && !sh.dead && !hit; t += 1 / 60) { stepShot(sh, free, t, 1 / 60); stepRacer(b, { x: 0, y: 0, brake: false }, free, t, 1 / 60); if (shotHits(sh, b, free)) hit = true; }
+  const v0 = b.v; zap(b);
+  check(hit && b.v < v0 * 0.7, `заряд догоняет того, кто впереди на линии, попадание замедляет (${v0.toFixed(0)} → ${b.v.toFixed(0)})`);
+  const c2 = { ...newRacer(1), s: 140, x: 7, y: 0, v: 50, next: b.next };
+  const sh2 = fire({ ...a, gun: 0 }, 'a');
+  let miss = true;
+  for (let t = 0; t < 2 && !sh2.dead; t += 1 / 60) { stepShot(sh2, free, t, 1 / 60); if (shotHits(sh2, c2, free)) miss = false; }
+  check(miss, 'мимо того, кто в стороне');
+  // преграда гасит заряд
+  const o = tr.obstacles.find((q) => q.kind === 'half');
+  const sh3 = { route: 0, s: o.s - 10, x: Math.cos(o.a) * 6, y: Math.sin(o.a) * 6, v: 150, t: 0, dead: null };
+  for (let t = 0; t < 1 && !sh3.dead; t += 1 / 60) stepShot(sh3, course, t, 1 / 60);
+  check(sh3.dead === 'wall', 'стена останавливает заряд');
+  check(botAims({ s: 100, x: 0, y: 0 }, [{ s: 160, x: 1, y: 0 }]) && !botAims({ s: 100, x: 0, y: 0 }, [{ s: 160, x: 6, y: 0 }]), 'бот целится только в того, кто на линии впереди');
 }
 console.log(fails ? `\nошибок: ${fails}` : '\nошибок: 0');
 process.exit(fails ? 1 : 0);

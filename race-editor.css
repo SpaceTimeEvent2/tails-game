@@ -7,7 +7,11 @@ body { touch-action: none; user-select: none; -webkit-user-select: none; font-fa
 .chip { flex: none; min-height: 42px; padding: 0 12px; border-radius: 12px; border: 2px solid #ffffff44; background: #06192bcc; color: #fff; font: 800 14px var(--font); cursor: pointer; white-space: nowrap; }
 .chip.go { background: linear-gradient(180deg, #8df0a0, #2fb45c); color: #06301a; border-color: #d8ffe0; font-size: 16px; }
 .chip:disabled { opacity: .5; }
-#status { flex: 1; min-width: 0; padding: 4px 10px; color: #fff; font-size: 14px; font-weight: 700; line-height: 1.15; text-shadow: 0 1px 3px #000; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.chip.fix { background: linear-gradient(180deg, #ffe07a, #f0a92a); color: #3a2400; border-color: #fff3c4; }
+.chip[hidden] { display: none; }
+#top .grow { flex: 1; min-width: 0; }
+#status { position: fixed; z-index: 5; top: calc(max(6px, env(safe-area-inset-top)) + 48px); left: calc(10px + env(safe-area-inset-left)); max-width: 70vw; padding: 2px 10px; border-radius: 10px; background: #000a; color: #fff; font-size: 14px; font-weight: 700; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+#btn-name { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
 #status.bad { color: #ffd447; }
 #fly-keys { position: fixed; z-index: 5; right: calc(10px + env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
 #fly-keys button { width: 56px; height: 56px; border-radius: 14px; border: 2px solid #ffffff55; background: #06192bbb; font-size: 24px; touch-action: none; cursor: pointer; }
@@ -16,5 +20,7 @@ body { touch-action: none; user-select: none; -webkit-user-select: none; font-fa
 #hotbar button { position: relative; width: clamp(38px, 8.6vw, 62px); max-width: 62px; height: clamp(38px, 8.6vw, 62px); max-height: 62px; padding: 0; border: 3px solid #4a4e7c; border-radius: 3px; background: #14163a center / 76% no-repeat; image-rendering: pixelated; cursor: pointer; touch-action: none; font-size: 22px; color: #fff; }
 #hotbar button.on { border-color: #ffd447; box-shadow: 0 0 0 2px #ffd447; }
 #tip { position: fixed; z-index: 5; left: 50%; bottom: calc(clamp(52px, 11vw, 80px) + env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 2px 12px; border-radius: 999px; background: #000a; color: #fff; font-size: 13px; font-weight: 700; pointer-events: none; white-space: nowrap; }
-#toast { bottom: auto; top: 58px; }
+#toast { bottom: auto; top: 86px; }
+@media (max-width: 900px) { #btn-pub .t { display: none; } }
 @media (max-width: 720px) { #btn-name { display: none; } #status { font-size: 12px; } .chip { padding: 0 8px; font-size: 13px; } }
+@media (max-width: 480px) { #btn-diff { display: none; } #top .round { width: 38px; } }

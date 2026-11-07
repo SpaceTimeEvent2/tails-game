@@ -38,7 +38,7 @@ async function phone(name, width = 800, height = 360) {
   await page.waitForFunction(() => window.__ed);
   const ed = (fn, ...a) => page.evaluate(fn, ...a);
   check(await ed(() => __ed.blocks.size) === 1, 'новая трасса начинается со старта');
-  const fit = await ed(() => [...document.querySelectorAll('#hotbar button, #top > *')].every((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight && r.width > 0; }));
+  const fit = await ed(() => [...document.querySelectorAll('#hotbar button, #top > *:not(.grow), #status')].every((e) => { const r = e.getBoundingClientRect(); return !r.width || (r.left >= 0 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight); }));
   check(fit, 'панель блоков и кнопки в экране телефона');
   const big = await ed(() => [...document.querySelectorAll('#hotbar button')].every((e) => e.getBoundingClientRect().width >= 38));
   check(big, 'кнопки блоков не меньше 38 пикселей');
@@ -68,6 +68,20 @@ async function phone(name, width = 800, height = 360) {
   check(moved && stillFlying && twoFinger === before + 1, `летим джойстиком и одновременно ставим блок вторым пальцем (${twoFinger - before})`);
   await ed(() => __ed.undo());
 
+  // «Достроить»: от старта до финиша одним нажатием, и шаг назад всё убирает
+  const fixShown = await ed(() => !document.getElementById('btn-fix').hidden);
+  const n0 = await ed(() => __ed.blocks.size);
+  await page.$eval('#btn-fix', (b) => b.click());
+  const fixed = await ed(() => [__ed.analysis.ok, __ed.blocks.size]);
+  check(fixShown && fixed[0] && fixed[1] > n0 && await ed(() => document.getElementById('btn-fix').hidden), `«Достроить» доводит трассу до финиша (+${fixed[1] - n0} блоков)`);
+  await page.screenshot({ path: path.join(SHOTS, 'editor-fixed.png') });
+  await ed(() => __ed.undo());
+  check(await ed(() => __ed.blocks.size) === n0, 'шаг назад отменяет достройку целиком');
+  // сохранить кнопкой
+  await ed(() => localStorage.removeItem('tg.my.races'));
+  await page.$eval('#btn-save', (b) => b.click());
+  check(await ed(() => JSON.parse(localStorage.getItem('tg.my.races') || '[]').length === 1 && /Сохранено/.test(document.getElementById('toast').textContent)), 'кнопка 💾 сохраняет трассу в «Мои»');
+
   // выбор блока по панели касанием
   await page.$eval('#hotbar', (h) => h.scrollIntoView());
   const slot = await page.$$eval('#hotbar button', (b) => { const r = b[8].getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
@@ -77,7 +91,7 @@ async function phone(name, width = 800, height = 360) {
   // ошибка, если нет финиша: лететь нельзя, остаётся на месте
   await page.$eval('#btn-fly', (b) => b.click());
   await sleep(100);
-  check(page.url().includes('race-editor') && /финиш/i.test(await page.$eval('#status', (e) => e.textContent)), 'без финиша лететь нельзя, подсказка видна');
+  check(page.url().includes('race-editor') && /финиш|блоков/i.test(await page.$eval('#status', (e) => e.textContent)), 'без финиша лететь нельзя, подсказка видна');
   await page.screenshot({ path: path.join(SHOTS, 'editor-new.png') });
   await ctx.close();
 }
@@ -153,6 +167,77 @@ async function phone(name, width = 800, height = 360) {
   const after = await a.page.evaluate(async () => (await (await fetch('api/tracks')).json()).tracks.length);
   check(before === 1 && after === 0, `три жалобы скрывают трассу у всех (${before} → ${after})`);
   await a.ctx.close(); await b.ctx.close();
+}
+
+/* ── с друзьями на своей трассе: из конструктора в лобби, двое в комнате, ветки видны друг у друга ── */
+{
+  const a = await phone('Аня'), b = await phone('Боря');
+  for (const [pl, n, c] of [[a, 'Аня', '#ff6f91'], [b, 'Боря', '#8fd0ff']]) {
+    await pl.page.goto(`${BASE}/index.html`);
+    await pl.page.evaluate((n, c) => localStorage.setItem('tg.me', JSON.stringify({ name: n, color: c, emoji: '🦊', hero: 'ghost' })), n, c);
+  }
+  await a.page.goto(`${BASE}/race-editor.html?debug&code=${encodeURIComponent(encode(EXAMPLES[1]))}`);
+  await a.page.waitForFunction(() => window.__ed);
+  await a.page.$eval('#btn-team', (x) => x.click());
+  await a.page.waitForFunction(() => location.pathname.endsWith('lobby.html') && document.getElementById('map').value === 'track', { timeout: 10000 });
+  await a.page.waitForFunction(() => !document.getElementById('games').textContent.includes('Подключаемся'));
+  await a.page.evaluate(() => document.getElementById('btn-create').click());
+  await a.page.waitForFunction(() => /^[A-Z0-9]{4}$/.test(document.getElementById('room-code').textContent), { timeout: 10000 });
+  const code = await a.page.$eval('#room-code', (e) => e.textContent);
+  check(/Своя трасса/.test(await a.page.$eval('#room-where', (e) => e.textContent)), `комната на своей трассе создана: ${code}`);
+  await b.page.goto(`${BASE}/lobby.html?debug&join=${code}`);
+  await a.page.waitForFunction(() => document.querySelectorAll('#room-players .p').length === 2, { timeout: 10000 });
+  await a.page.evaluate(() => document.getElementById('btn-start').click());
+  for (const x of [a, b]) await x.page.waitForFunction(() => location.pathname.endsWith('race.html') && window.__race && window.__race.state === 'go', { timeout: 120000 });
+  const routes = await Promise.all([a, b].map((x) => x.page.evaluate(() => [window.__race.course.routes.length, window.__race.riders.size])));
+  check(routes.every(([r, n]) => r === 4 && n === 2), `оба летят по одной трассе с развилками, без ботов (${JSON.stringify(routes)})`);
+  // Боря уходит на другую ветку — Аня видит его там
+  const want = await b.page.evaluate(() => { const R = __race, m = R.mine.p, f = R.track.forks[0], o = f.opts.find((q) => q.route !== 0) || f.opts[1];
+    m.route = o.route; m.nf = 1; m.s = f.s + 60; m.next = R.track.obstacles.findIndex((q) => q.s > m.s); if (m.next < 0) m.next = R.track.obstacles.length; m.v = 30; return o.route; });
+  await a.page.waitForFunction((w) => [...__race.riders.values()].some((r) => !r.isMe && r.p.route === w), { timeout: 8000 }, want).catch(() => {});
+  check(await a.page.evaluate((w) => [...__race.riders.values()].some((r) => !r.isMe && r.p.route === w), want), `Аня видит Борю на его ветке (${want})`);
+  // выстрел Ани долетает до Бори через сервер
+  await a.page.evaluate(() => { const R = __race, m = R.mine.p; m.gun = 0; R.shoot(R.mine); });
+  await b.page.waitForFunction(() => __race.shots.length > 0, { timeout: 5000 }).catch(() => {});
+  check(await b.page.evaluate(() => __race.shots.length > 0), 'выстрел другого игрока виден в комнате');
+  await a.ctx.close(); await b.ctx.close();
+}
+
+/* ── автосохранение в редакторе карт защиты ── */
+{
+  const { page, ctx } = await phone('карты');
+  await page.goto(`${BASE}/editor.html?debug&new=1`);
+  await page.waitForSelector('#name');
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('tg.my.levels') || '[]').length);
+  await sleep(1500);
+  check(await page.evaluate(() => JSON.parse(localStorage.getItem('tg.my.levels') || '[]').length) === before, 'просто открыть редактор — ничего не сохраняется');
+  // пример дорожки рабочий: меняем название, через секунду он сам в «Моих уровнях»
+  await page.evaluate(() => localStorage.removeItem('tg.editor.draft'));
+  await page.goto(`${BASE}/editor.html?debug`);
+  await page.waitForFunction(() => document.getElementById('name').value !== '');   // скрипт редактора уже подписался на правки
+  await page.evaluate(() => { const n = document.getElementById('name'); n.value = 'Автосохранение'; n.dispatchEvent(new Event('input', { bubbles: true })); n.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('tg.my.levels') || '[]').some((x) => x.name === 'Автосохранение'), { timeout: 5000 }).catch(() => {});
+  const saved = await page.evaluate(() => [JSON.parse(localStorage.getItem('tg.my.levels') || '[]').filter((x) => x.name === 'Автосохранение').length, document.getElementById('btn-save').textContent]);
+  check(saved[0] === 1 && /Сохранено/.test(saved[1]), `правка сама сохранилась в «Мои уровни» (${saved})`);
+  await page.evaluate(() => { const n = document.getElementById('name'); n.value = 'Автосохранение 2'; n.dispatchEvent(new Event('input', { bubbles: true })); n.dispatchEvent(new Event('change', { bubbles: true })); });
+  await sleep(1600);
+  const list = await page.evaluate(() => JSON.parse(localStorage.getItem('tg.my.levels') || '[]').map((x) => x.name));
+  check(list.includes('Автосохранение 2') && !list.includes('Автосохранение'), `повторная правка обновляет тот же уровень, а не плодит копии (${list.join(', ')})`);
+  // недоделанный уровень — тоже сохраняется, черновиком, и открывается в редакторе, а не в игре
+  await page.evaluate(() => localStorage.removeItem('tg.editor.draft'));
+  await page.goto(`${BASE}/editor.html?debug&new=1`);
+  await page.waitForFunction(() => document.getElementById('name').value !== '');
+  await page.evaluate(() => { const n = document.getElementById('name'); n.value = 'Недоделанный'; n.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('tg.my.levels') || '[]').some((x) => x.name === 'Недоделанный'), { timeout: 5000 }).catch(() => {});
+  check(await page.evaluate(() => JSON.parse(localStorage.getItem('tg.my.levels') || '[]').some((x) => x.name === 'Недоделанный')), 'недоделанный уровень сохранился черновиком');
+  await page.goto(`${BASE}/map.html?map=custom`);
+  const card = await page.$$eval('#levels .lvl.mine-lvl', (els) => els.map((e) => [e.textContent.replace(/\s+/g, ' '), e.querySelector('.fill').getAttribute('href')]).find(([t]) => t.includes('Недоделанный')));
+  check(card && /Черновик/.test(card[0]) && card[1].startsWith('editor.html?edit='), `в «Моих уровнях» он помечен черновиком и ведёт в редактор (${card && card[1]})`);
+  await page.goto(`${BASE}/lobby.html`);
+  await page.waitForSelector('#map');
+  const opts = await page.evaluate(() => { const m = document.getElementById('map'); if (![...m.options].some((o) => o.value === 'custom')) return []; m.value = 'custom'; m.dispatchEvent(new Event('change')); return [...document.getElementById('level').options].map((o) => o.textContent); });
+  check(!opts.some((t) => t.includes('Недоделанный')), 'черновик не предлагается для командной игры');
+  await ctx.close();
 }
 
 /* ── список, вкладки ── */

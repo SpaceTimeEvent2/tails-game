@@ -118,6 +118,10 @@ input.code { text-transform: uppercase; letter-spacing: 5px; width: 6.6em; flex:
 .stage { position: relative; min-height: 0; overflow: hidden; border-radius: clamp(14px, 3vh, 26px); border: 2px solid #ffffff26;
          background: radial-gradient(70% 60% at 50% 35%, #2a7ea8, #0c2c44); }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.stage .ships { position: absolute; z-index: 2; top: 8px; left: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; line-height: 1.1; text-align: center; color: #cfe6f0; }
+.stage .ships > div { display: flex; flex-direction: column; gap: 6px; }
+.stage .ships button { width: clamp(40px, 11vh, 52px); height: clamp(40px, 11vh, 52px); padding: 0; border-radius: 12px; border: 2px solid #ffffff33; background: #06192bcc; display: grid; place-items: center; cursor: pointer; }
+.stage .ships button.on { border-color: var(--mimosa); background: #ffd44733; }
 .stage .hint { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 13px; color: #cfe6f0; pointer-events: none; }
 .choose { display: flex; flex-direction: column; justify-content: space-between; gap: clamp(5px, 1.4vh, 14px); min-height: 0; overflow: hidden; padding: clamp(8px, 1.8vh, 18px) clamp(10px, 1.2vw, 18px);
           background: #0c2c44d0; border: 1px solid #ffffff26; border-radius: clamp(14px, 3vh, 26px); }
