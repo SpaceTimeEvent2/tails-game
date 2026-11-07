@@ -26,8 +26,11 @@ export function me() {
 }
 export function saveMe(m) { try { localStorage.setItem('tg.me', JSON.stringify(m)); } catch (e) { /* */ } }
 
+/** Игра открыта в приложении: Android — страницы с appassets.androidplatform.net, iOS — со своей схемы tails://app/. */
+const inApp = () => location.host.endsWith('androidplatform.net') || location.protocol === 'tails:';
+
 /** Адрес HTTP-сервера игры: в приложении — spacecode.business, в браузере — рядом со страницей. */
-export const apiBase = () => (location.host.endsWith('androidplatform.net') ? 'https://spacecode.business/tails/play/' : location.pathname.replace(/[^/]*$/, ''));
+export const apiBase = () => (inApp() ? 'https://spacecode.business/tails/play/' : location.pathname.replace(/[^/]*$/, ''));
 
 const tokenKey = 'tg.token';
 const getToken = () => { try { return sessionStorage.getItem(tokenKey) || ''; } catch (e) { return ''; } };
@@ -48,11 +51,10 @@ export class Net {
 
   connect(profile) {
     this.profile = profile;
-    // сервер командной игры: в Android-приложении (страницы из appassets) — spacecode.business/tails/play,
+    // сервер командной игры: в приложении (Android и iOS) — spacecode.business/tails/play,
     // в браузере — рядом со страницей (/ws на корне или /tails/play/ws за nginx)
-    const app = location.host.endsWith('androidplatform.net');
     const dir = location.pathname.replace(/[^/]*$/, '');
-    const url = window.TAILS_WS || (app ? 'wss://spacecode.business/tails/play/ws'
+    const url = window.TAILS_WS || (inApp() ? 'wss://spacecode.business/tails/play/ws'
       : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${dir}ws`);
     const ws = new WebSocket(url);
     this.ws = ws;
