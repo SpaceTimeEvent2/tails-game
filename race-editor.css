@@ -1,0 +1,20 @@
+/* Конструктор трасс из блоков */
+html, body { background: #05061a; overflow: hidden; }
+body { touch-action: none; user-select: none; -webkit-user-select: none; font-family: var(--font); }
+#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#top { position: fixed; z-index: 5; top: max(6px, env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); right: calc(8px + env(safe-area-inset-right)); display: flex; align-items: center; gap: 6px; }
+#top .round { flex: none; width: 42px; height: 42px; line-height: 40px; padding: 0; font-size: 18px; text-align: center; text-decoration: none; }
+.chip { flex: none; min-height: 42px; padding: 0 12px; border-radius: 12px; border: 2px solid #ffffff44; background: #06192bcc; color: #fff; font: 800 14px var(--font); cursor: pointer; white-space: nowrap; }
+.chip.go { background: linear-gradient(180deg, #8df0a0, #2fb45c); color: #06301a; border-color: #d8ffe0; font-size: 16px; }
+.chip:disabled { opacity: .5; }
+#status { flex: 1; min-width: 0; padding: 4px 10px; color: #fff; font-size: 14px; font-weight: 700; line-height: 1.15; text-shadow: 0 1px 3px #000; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+#status.bad { color: #ffd447; }
+#fly-keys { position: fixed; z-index: 5; right: calc(10px + env(safe-area-inset-right)); bottom: calc(76px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
+#fly-keys button { width: 56px; height: 56px; border-radius: 14px; border: 2px solid #ffffff55; background: #06192bbb; font-size: 24px; touch-action: none; cursor: pointer; }
+#fly-keys button.on { background: #6fe3ff; }
+#hotbar { position: fixed; z-index: 5; left: 50%; bottom: calc(6px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 3px; padding: 4px; background: #000a; border: 3px solid #2a2d55; border-radius: 6px; }
+#hotbar button { position: relative; width: clamp(38px, 8.6vw, 62px); max-width: 62px; height: clamp(38px, 8.6vw, 62px); max-height: 62px; padding: 0; border: 3px solid #4a4e7c; border-radius: 3px; background: #14163a center / 76% no-repeat; image-rendering: pixelated; cursor: pointer; touch-action: none; font-size: 22px; color: #fff; }
+#hotbar button.on { border-color: #ffd447; box-shadow: 0 0 0 2px #ffd447; }
+#tip { position: fixed; z-index: 5; left: 50%; bottom: calc(clamp(52px, 11vw, 80px) + env(safe-area-inset-bottom)); transform: translateX(-50%); padding: 2px 12px; border-radius: 999px; background: #000a; color: #fff; font-size: 13px; font-weight: 700; pointer-events: none; white-space: nowrap; }
+#toast { bottom: auto; top: 58px; }
+@media (max-width: 720px) { #btn-name { display: none; } #status { font-size: 12px; } .chip { padding: 0 8px; font-size: 13px; } }

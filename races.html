@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хвосты — трассы игроков</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="menu.css">
+<style>
+  #pick { grid-template-rows: auto auto minmax(0, 1fr); }
+  .tabs { display: flex; gap: 6px; margin-bottom: 8px; flex: none; }
+  .tabs button { padding: 8px 14px; min-height: 42px; border-radius: 12px; border: 2px solid #ffffff33; background: #06192bcc; color: #fff; font: 800 15px var(--font); cursor: pointer; }
+  .tabs button.on { background: var(--mimosa); color: #3a2c00; }
+  .lvl.mine-lvl .edit.second { top: 56px; }
+  .levels.scroll { --cols: 3; grid-auto-rows: minmax(136px, 1fr); }
+  .empty { grid-column: 1 / -1; padding: 22px; text-align: center; color: #cfe0ea; font-size: 16px; }
+</style>
+</head>
+<body>
+<div class="waves"></div>
+<main id="pick">
+  <header class="top">
+    <a class="back" href="map.html?map=race">← Гонка</a>
+    <div class="grow"><h1 class="title">Трассы из блоков</h1><p class="sub">Лети по трассам других игроков или построй свою.</p></div>
+    <a class="pill" href="race-editor.html">＋ Новая</a>
+  </header>
+  <div class="tabs" id="tabs">
+    <button type="button" data-tab="all">🌍 Все игроки</button>
+    <button type="button" data-tab="mine">🛠 Мои</button>
+    <button type="button" data-tab="samples">⭐ Примеры</button>
+  </div>
+  <div class="levels scroll" id="levels"></div>
+</main>
+<script type="module">
+import { EXAMPLES, analyze, decode, encode, trackName, xyzOf, myRaces, DIFFS, T } from './src/race-design.js';
+import { authorId } from './src/custom.js';
+import { apiBase } from './src/net.js';
+
+const grid = document.getElementById('levels');
+const debug = new URLSearchParams(location.search).has('debug') ? '&debug' : '';
+const COLOR = { [T.start]: '#3ddc7a', [T.finish]: '#ffffff', [T.fork]: '#b48cff', [T.boost]: '#ffe14a', [T.gate]: '#ff5a7e', [T.half]: '#ff9a4a', [T.bar]: '#ffc23c', [T.rocks]: '#a89a8c' };
+
+/** Вид сверху: блоки выше светлее. */
+function mini(d) {
+  let r = '', x0 = 99, x1 = 0, z0 = 99, z1 = 0;
+  const list = [...d.blocks].map(([k, t]) => [xyzOf(k), t]).sort((a, b) => a[0][1] - b[0][1]);
+  for (const [[x, , z]] of list) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  for (const [[x, y, z], t] of list) r += `<rect x="${x}" y="${z}" width="1" height="1" fill="${COLOR[t] || '#4fb0ff'}" opacity="${0.72 + Math.min(y, 6) * 0.045}"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0 - 2} ${z0 - 2} ${x1 - x0 + 5} ${z1 - z0 + 5}" preserveAspectRatio="xMidYMid meet"><rect x="-9" y="-9" width="60" height="60" fill="#0b0d2c"/>${r}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+function card(d, { edit, editIcon, extra = '', play }) {
+  const a = analyze(d);
+  const meta = a.ok ? `${DIFFS[d.d].name} · ${(a.length / 1000).toFixed(1)} км${a.routes.length > 1 ? ' · 🔀' : ''}` : 'Ещё не готова';
+  const href = a.ok ? play : edit;
+  return `<div class="lvl mine-lvl" style='--img:${mini(d)}'>
+    <a class="fill" href="${href}" aria-label="${trackName(d)}"></a>
+    <span class="name">${trackName(d)}</span>
+    <a class="edit" href="${edit}" title="${editIcon === '✏️' ? 'Изменить' : 'Сделать свою копию'}">${editIcon}</a>${extra}
+    <span class="meta">${a.ok ? '▶ ' : ''}${meta}</span></div>`;
+}
+const playHref = (code, editId) => `race.html?code=${encodeURIComponent(code)}${editId ? `&edit=${encodeURIComponent(editId)}` : ''}${debug}`;
+const copyHref = (code) => `race-editor.html?code=${encodeURIComponent(code)}${debug}`;
+
+function showSamples() {
+  grid.innerHTML = EXAMPLES.map((d) => { const c = encode(d); return card(d, { edit: copyHref(c), editIcon: '📄', play: playHref(c) }); }).join('');
+}
+function showMine() {
+  const list = myRaces.list();
+  grid.innerHTML = list.map((it) => {
+    const d = decode(it.code);
+    if (!d) return '';
+    return card(d, { edit: `race-editor.html?edit=${encodeURIComponent(it.id)}${debug}`, editIcon: '✏️', play: playHref(it.code, it.id),
+      extra: `<button class="edit second" type="button" data-del="${it.id}" title="Удалить">🗑</button>` });
+  }).join('') + `<a class="lvl add" href="race-editor.html"><span class="plus">＋</span><span class="name">Новая трасса</span></a>`;
+}
+async function showAll() {
+  grid.innerHTML = '<div class="empty">Загружаем трассы…</div>';
+  let list;
+  try {
+    const r = await fetch(`${apiBase()}api/tracks`);
+    list = (await r.json()).tracks;
+  } catch (e) {
+    if (tab === 'all') grid.innerHTML = '<div class="empty">Нет связи с сервером. Трассы игроков появятся, когда будет интернет. Пока можно полетать по примерам!</div>';
+    return;
+  }
+  if (tab !== 'all') return;
+  const reported = JSON.parse(localStorage.getItem('tg.reported') || '[]');
+  const html = list.filter((t) => !reported.includes(t.id)).map((t) => {
+    const d = decode(t.code);
+    if (!d) return '';
+    return card(d, { edit: copyHref(t.code), editIcon: '📄', play: playHref(t.code),
+      extra: `<button class="edit second" type="button" data-report="${t.id}" title="Пожаловаться">🚩</button>` });
+  }).join('');
+  grid.innerHTML = html || '<div class="empty">Пока никто не поделился трассой. Построй свою и нажми «🌍 Всем»!</div>';
+}
+let tab = 'all';
+function show(t) {
+  tab = t;
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+  ({ all: showAll, mine: showMine, samples: showSamples })[t]();
+}
+document.getElementById('tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); });
+grid.addEventListener('click', async (e) => {
+  const del = e.target.closest('[data-del]');
+  if (del && confirm('Удалить эту трассу с телефона?')) { myRaces.remove(del.dataset.del); showMine(); }
+  const rep = e.target.closest('[data-report]');
+  if (rep && confirm('Пожаловаться на эту трассу? Она пропадёт у тебя из списка.')) {
+    const id = rep.dataset.report;
+    localStorage.setItem('tg.reported', JSON.stringify([...JSON.parse(localStorage.getItem('tg.reported') || '[]'), id]));
+    rep.closest('.lvl').remove();
+    fetch(`${apiBase()}api/tracks/report`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ id, device: authorId() }) }).catch(() => {});
+  }
+});
+show('all');
+</script>
+</body>
+</html>

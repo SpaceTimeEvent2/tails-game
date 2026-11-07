@@ -3,7 +3,7 @@
 # nginx: https://spacecode.business/tails/play/ → игра, /tails/play/ws → WebSocket. Повторный запуск безопасен.
 set -euo pipefail
 cd "$(dirname "$0")"; H=root@144.91.83.27
-rsync -a --delete --exclude node_modules --exclude android --exclude store --exclude tools --exclude docs ./ $H:/opt/tails-game/
+rsync -a --delete --exclude node_modules --exclude android --exclude store --exclude tools --exclude docs --exclude .data ./ $H:/opt/tails-game/
 ssh $H 'set -e; cd /opt/tails-game && npm install --omit=dev --no-audit --no-fund -q
 cat > /etc/systemd/system/tails-game.service <<U
 [Unit]
@@ -11,7 +11,8 @@ Description=Tails co-op game server
 After=network.target
 [Service]
 WorkingDirectory=/opt/tails-game
-Environment=PORT=8841 HOST=127.0.0.1 QUIET=1
+Environment=PORT=8841 HOST=127.0.0.1 QUIET=1 DATA_DIR=/var/lib/tails-game
+StateDirectory=tails-game
 ExecStart=/usr/bin/node server/index.js
 Restart=always
 User=www-data

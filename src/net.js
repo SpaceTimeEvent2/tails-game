@@ -4,7 +4,7 @@
  * сервер узнаёт того же игрока и возвращает его место в комнате.
  */
 export const COLORS = ['#ffd447', '#ff6f91', '#8fd0ff', '#9be37a', '#c7b0ff', '#ffa45c'];
-export const EMOJIS = ['🦊', '🐱', '🐬', '🐢', '🦄', '🐝', '🐙', '🐸'];
+export const EMOJIS = ['🦊', '🐱', '🐬', '🐢', '🦄', '🐝', '🐙', '🐸', '🐼', '🦁', '🐵', '🐧', '🦉', '🦖', '🐰', '🐯'];
 export const HERO_IDS = ['dancer', 'maskot', 'ghost'];
 export const TINTS = ['', '#ff9dbb', '#8fd0ff', '#9be37a', '#ffe07a', '#c7b0ff', '#ffa45c', '#8b8fa8'];   // цвет поверх текстуры, '' — как есть
 
@@ -20,6 +20,9 @@ export function me() {
   };
 }
 export function saveMe(m) { try { localStorage.setItem('tg.me', JSON.stringify(m)); } catch (e) { /* */ } }
+
+/** Адрес HTTP-сервера игры: в приложении — spacecode.business, в браузере — рядом со страницей. */
+export const apiBase = () => (location.host.endsWith('androidplatform.net') ? 'https://spacecode.business/tails/play/' : location.pathname.replace(/[^/]*$/, ''));
 
 const tokenKey = 'tg.token';
 const getToken = () => { try { return sessionStorage.getItem(tokenKey) || ''; } catch (e) { return ''; } };

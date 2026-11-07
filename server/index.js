@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { MAPS } from '../src/levels.js';
 import { decode, toLevel } from '../src/custom.js';
+import { decode as decodeTrack, analyze as analyzeTrack, encode as encodeTrack } from '../src/race-design.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT || 8795);
@@ -28,6 +29,77 @@ const GRACE_MS = 8000;          // столько ждём вернувшего�
 const NAV_GRACE_MS = 30000;     // после «Играем!» все переходят из лобби в игру — ждём дольше
 const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // без 0/O и 1/I
 const log = (...a) => { if (!process.env.QUIET) console.log(new Date().toISOString().slice(11, 19), ...a); };
+
+/* ─────────────────── общие трассы из блоков ─────────────────── */
+
+// Каталог без авторов и свободного текста: код трассы и номер. Жалобы считаются с разных устройств, три жалобы скрывают трассу.
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, '.data');
+const TRACKS_FILE = path.join(DATA_DIR, 'tracks.json');
+const MAX_TRACKS = 2000, MAX_PUBLISH_PER_HOUR = 60, HIDE_AT = 3;
+let tracks = [];
+try { tracks = JSON.parse(fs.readFileSync(TRACKS_FILE, 'utf8')); } catch { /* каталог ещё пуст */ }
+const publishes = [];
+let saving = false, saveAgain = false;
+function saveTracks() {
+  if (saving) { saveAgain = true; return; }
+  saving = true;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = `${TRACKS_FILE}.tmp`;
+  fs.writeFile(tmp, JSON.stringify(tracks), (err) => {
+    const done = () => { saving = false; if (saveAgain) { saveAgain = false; saveTracks(); } };
+    if (err) { console.error(err); done(); return; }
+    fs.rename(tmp, TRACKS_FILE, (e) => { if (e) console.error(e); done(); });
+  });
+}
+const trackId = (code) => crypto.createHash('sha256').update(code).digest('base64url').slice(0, 12);
+function json(res, code, body) {
+  // страницы приложения открываются с appassets.androidplatform.net, поэтому нужен CORS
+  res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+  res.end(JSON.stringify(body));
+}
+function readBody(req, limit, cb) {
+  let body = '', over = false;
+  req.setEncoding('utf8');
+  req.on('data', (c) => { if (over) return; body += c; if (body.length > limit) { over = true; cb(null); } });
+  req.on('end', () => { if (!over) cb(body); });
+}
+function tracksApi(req, res, url) {
+  if (req.method === 'GET' && url === '/api/tracks') {
+    json(res, 200, { tracks: tracks.filter((t) => !t.hidden).slice(0, 300).map(({ id, code, at }) => ({ id, code, at })) });
+    return true;
+  }
+  if (req.method === 'POST' && url === '/api/tracks') {
+    readBody(req, 4000, (body) => {
+      const d = body === null ? null : decodeTrack(body);
+      if (!d || !analyzeTrack(d).ok) { json(res, 400, { error: 'Трасса не готова' }); return; }
+      const code = encodeTrack(d), id = trackId(code), had = tracks.find((t) => t.id === id);
+      if (had) { json(res, had.hidden ? 403 : 200, had.hidden ? { error: 'Эту трассу скрыли' } : { id }); return; }
+      const hour = Date.now() - 3600000;
+      while (publishes.length && publishes[0] < hour) publishes.shift();
+      if (publishes.length >= MAX_PUBLISH_PER_HOUR) { json(res, 429, { error: 'Слишком много новых трасс, попробуй позже' }); return; }
+      publishes.push(Date.now());
+      tracks.unshift({ id, code, at: Date.now(), reports: [] });
+      tracks.length = Math.min(tracks.length, MAX_TRACKS);
+      saveTracks();
+      json(res, 200, { id });
+    });
+    return true;
+  }
+  if (req.method === 'POST' && url === '/api/tracks/report') {
+    readBody(req, 200, (body) => {
+      let m = null;
+      try { m = JSON.parse(body); } catch { /* */ }
+      const t = m && tracks.find((x) => x.id === m.id), who = m && String(m.device || '').slice(0, 16);
+      if (!t || !who) { json(res, 400, { error: 'Нет такой трассы' }); return; }
+      if (!t.reports.includes(who)) t.reports.push(who);
+      if (t.reports.length >= HIDE_AT) t.hidden = true;
+      saveTracks();
+      json(res, 200, { ok: true });
+    });
+    return true;
+  }
+  return false;
+}
 
 /* ─────────────────── статика ─────────────────── */
 
@@ -49,6 +121,7 @@ function serveStatic(req, res) {
     return;
   }
   if (url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
+  if (url.startsWith('/api/tracks') && tracksApi(req, res, url)) return;
   const file = path.join(ROOT, url);
   if (!PUBLIC.test(url) || url.includes('..') || !file.startsWith(ROOT + path.sep)) { res.writeHead(404); res.end('нет такого'); return; }
   fs.stat(file, (err, st) => {

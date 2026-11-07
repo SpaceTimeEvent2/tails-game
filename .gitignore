@@ -15,3 +15,5 @@ keystore.properties
 store/video/*
 !store/video/vo-raw/
 !store/video/ad-raw/
+!store/video/race-raw/
+.data/

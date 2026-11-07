@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хвосты — конструктор трасс</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="play.css">
+<link rel="stylesheet" href="race-editor.css">
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="top">
+  <a class="round" href="races.html" title="К трассам">🏠</a>
+  <button class="round" id="btn-undo" type="button" title="Шаг назад">↩️</button>
+  <button class="chip" id="btn-name" type="button" title="Другое название"></button>
+  <button class="chip" id="btn-diff" type="button" title="Сложность"></button>
+  <div id="status"></div>
+  <button class="chip" id="btn-pub" type="button">🌍 Всем</button>
+  <button class="chip go" id="btn-fly" type="button">▶ Лететь</button>
+</div>
+<div id="fly-keys">
+  <button id="btn-up" type="button" title="Выше">⬆️</button>
+  <button id="btn-down" type="button" title="Ниже">⬇️</button>
+</div>
+<div id="hotbar"></div>
+<div id="tip"></div>
+<div id="joy"><i></i></div>
+<div id="toast"></div>
+<script type="module" src="src/race-editor.js"></script>
+</body>
+</html>

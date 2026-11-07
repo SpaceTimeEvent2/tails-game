@@ -41,7 +41,7 @@ const flying = (page) => page.waitForFunction(() => window.__race.state === 'go'
   await page.screenshot({ path: path.join(SHOTS, 'race-menu.png') });
   await page.goto(`${BASE}/map.html?map=race`);
   const lv = await page.$$eval('#levels .lvl', (els) => els.map((e) => [e.tagName, e.getAttribute('href')]));
-  check(lv.length === 3 && lv[0][1] === 'race.html?level=1' && lv[1][0] === 'DIV', `три трассы, открыта первая (${lv.length})`);
+  check(lv.length === 4 && lv[0][1] === 'race.html?level=1' && lv[1][0] === 'DIV' && lv[3][1] === 'races.html', `три трассы, открыта первая, рядом трассы игроков (${lv.length})`);
   await ctx.close();
 }
 
@@ -82,9 +82,9 @@ const flying = (page) => page.waitForFunction(() => window.__race.state === 'go'
     m.next = R.track.obstacles.indexOf(o); m.s = o.s - 2; m.x = o.x + (o.x > 0 ? -9 : 9); m.y = 0; m.v = 60; m.safe = 0;
     return o.s;
   });
-  await page.waitForFunction((s) => window.__race.mine.p.s > s + 1, { timeout: 15000 }, hit);
-  const after = await page.evaluate(() => window.__race.mine.p.v);
-  check(after < 40, `удар о преграду сбрасывает скорость (${after.toFixed(0)})`);
+  await sleep(1500);
+  const after = await page.evaluate(() => [window.__race.mine.p.v, window.__race.mine.p.s]);
+  check(after[0] < 20 && after[1] <= hit, `преграда твёрдая: скорость ${after[0].toFixed(0)}, не пролетел сквозь неё`);
 
   // финиш: занимаем первое место и открываем следующую трассу
   await page.evaluate(() => { const R = window.__race, m = R.mine.p; m.next = R.track.obstacles.length; m.s = R.track.length - 20; m.v = 60; });

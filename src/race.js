@@ -10,7 +10,8 @@ import { Runner, Joystick, loadRunnerModel } from './runner.js';
 import { Net, me as myProfile, COLORS } from './net.js';
 import { MAPS, progress } from './levels.js';
 import { audio } from './audio.js';
-import { TUBE_R, buildTrack, sample, barAngle, newRacer, stepRacer, botInput } from './race-sim.js';
+import { TUBE_R, buildTrack, sample, barAngle, newRacer, stepRacer, botInput, routeOf } from './race-sim.js';
+import { buildCourse, decode as decodeTrack, W as FIELD, CELL as FIELD_CELL } from './race-design.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -50,10 +51,21 @@ if (ROOM) {
   if (!def) failPage('Эта трасса не открывается');
   $('btn-home').href = 'lobby.html';
   $('btn-home').addEventListener('click', () => net.send({ t: 'leave' }));
-} else {
+} else if (!qs.get('code')) {
   def = MAPS.race.levels.find((l) => l.id === Number(qs.get('level'))) || MAPS.race.levels[0];
 }
-const track = buildTrack(def);
+// своя трасса из блоков (race-design.js): несколько путей; у готовых трасс путь один
+let course;
+if (def) course = { routes: [buildTrack(def)] };
+else {
+  const design = decodeTrack(qs.get('code'));
+  course = design && buildCourse(design);
+  if (!course) failPage('Эта трасса не открывается');
+  def = course.def;
+  $('btn-home').href = 'races.html';
+}
+const track = course.routes[0];
+const draws = course.draw || track.obstacles.map((o) => ({ track, o }));
 
 /* ── сцена ── */
 const canvas = $('scene');
@@ -105,7 +117,14 @@ scene.add(sky);
   const COLORS_P = [0xe08a4f, 0x4fa8e0, 0xc06fe0, 0x7fd48a, 0xe0c84f];
   const mid = (f) => v3(track.pos, Math.floor((track.n - 1) * f));
   for (let i = 0; i < 6; i++) {
-    const c = mid((i + 0.5) / 6), a = rnd() * 6.283, d = 190 + rnd() * 170, r = 28 + rnd() * 48;
+    let c = mid((i + 0.5) / 6), a = rnd() * 6.283, d = 190 + rnd() * 170;
+    const r = 28 + rnd() * 48;
+    if (def.custom) {         // своя трасса вьётся как угодно: планеты за пределами поля, чтобы тоннель в них не упёрся
+      const half = (FIELD * FIELD_CELL) / 2;
+      c = new THREE.Vector3(half, half * 0.3, half);
+      a = (i / 6) * 6.283;
+      d = half * 1.5 + 190 + rnd() * 170;
+    }
     const m = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 20), new THREE.MeshStandardMaterial({ color: COLORS_P[i % 5], roughness: 0.85, fog: false }));
     m.position.set(c.x + Math.cos(a) * d, c.y + Math.sin(a) * d, c.z + (rnd() - 0.5) * 120);
     scene.add(m);
@@ -127,8 +146,10 @@ scene.add(sky);
   }
 }
 
-/* тоннель: прозрачная труба, рёбра и светящиеся полосы */
-{
+/* тоннель: прозрачная труба, рёбра и светящиеся полосы. Общие куски разных путей рисуются один раз (drawn). */
+for (const route of course.routes) {
+  const track = route, drawn = route.drawn;
+  const shown = (i) => !drawn || drawn[Math.min(i, route.n - 1)] || drawn[Math.min(i + 3, route.n - 1)];
   const SEG = 28, STEP = 3, rings = Math.floor((track.n - 1) / STEP) + 1;
   const pos = new Float32Array(rings * (SEG + 1) * 3), col = new Float32Array(rings * (SEG + 1) * 3), idx = [];
   const lines = [], lineCol = [], bandPos = [], bandCol = [], bandIdx = [];
@@ -149,12 +170,12 @@ scene.add(sky);
       at(i, (k / SEG) * Math.PI * 2, a0);
       pos.set(a0, (r * (SEG + 1) + k) * 3);
       col.set([color.r, color.g, color.b], (r * (SEG + 1) + k) * 3);
-      if (r < rings - 1 && k < SEG) {
+      if (r < rings - 1 && k < SEG && shown(i)) {
         const a = r * (SEG + 1) + k, b = a + SEG + 1;
         idx.push(a, b, a + 1, b, b + 1, a + 1);
       }
     }
-    if (r % 6 === 0 && r < rings - 1) {             // ребро: светящаяся полоса, видна и вблизи, и издалека
+    if (r % 6 === 0 && r < rings - 1 && shown(i)) {             // ребро: светящаяся полоса, видна и вблизи, и издалека
       color.setHSL(hue(f), 1, 0.62);
       for (let k = 0; k < SEG; k++) {
         const q0 = (k / SEG) * 6.2832, q1 = ((k + 1) / SEG) * 6.2832, b0 = bandPos.length / 3;
@@ -163,7 +184,7 @@ scene.add(sky);
         bandIdx.push(b0, b0 + 2, b0 + 1, b0 + 1, b0 + 2, b0 + 3);
       }
     }
-    if (r < rings - 1) {                            // продольные полосы
+    if (r < rings - 1 && shown(i)) {                // продольные полосы
       color.setHSL(hue(f) + 0.08, 1, 0.62);
       for (let k = 0; k < 6; k++) {
         const a = (k / 6) * 6.2832;
@@ -189,7 +210,7 @@ scene.add(sky);
 }
 
 /** Плоскость сечения в точке s: x вправо, y вверх. */
-function planeAt(s) {
+function planeAt(s, track = course.routes[0]) {
   const g = new THREE.Group();
   const P = sample(track, s, track.pos, [0, 0, 0]), T = sample(track, s, track.tan, [0, 0, 0]), U = sample(track, s, track.up, [0, 0, 0]), R = sample(track, s, track.right, [0, 0, 0]);
   const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(...R), new THREE.Vector3(...U), new THREE.Vector3(-T[0], -T[1], -T[2]));
@@ -207,8 +228,8 @@ const spinners = [], tumblers = [];
   const rockMat = new THREE.MeshStandardMaterial({ color: 0x9a8a7c, roughness: 1, flatShading: true });
   const barMat = new THREE.MeshStandardMaterial({ color: 0xffc23c, emissive: 0xb86a00, emissiveIntensity: 0.7, roughness: 0.5 });
   const boostMat = new THREE.MeshBasicMaterial({ color: 0xffe14a });
-  for (const o of track.obstacles) {
-    const g = planeAt(o.s);
+  for (const { track: route, o } of draws) {
+    const g = planeAt(o.s, route);
     if (o.kind === 'gate') {
       const sh = new THREE.Shape();
       sh.absarc(0, 0, TUBE_R, 0, Math.PI * 2);
@@ -295,6 +316,7 @@ class Rider {
 
   /** Поставить в мир по (s, x, y) и наклонить по боковой скорости. */
   place(s, x, y, vx, vy, v, dt) {
+    const track = routeOf(course, this.p);
     const P = sample(track, s, track.pos, this._a ||= [0, 0, 0]), T = sample(track, s, track.tan, this._b ||= [0, 0, 0]);
     const U = sample(track, s, track.up, this._c ||= [0, 0, 0]), R = sample(track, s, track.right, this._d ||= [0, 0, 0]);
     const root = this.r.root;
@@ -324,7 +346,7 @@ let raceT = 0;
 const finished = [];                  // порядок финиша: [{ id, t }]
 const roster = (id) => (room ? room.players.find((p) => p.id === id) : null);
 
-const BOTS = {
+const BOTS = def.bots || {
   1: [[0.28, 0.84, 0.55], [0.38, 0.78, 0.4], [0.48, 0.74, 0.3]],
   2: [[0.2, 0.92, 0.7], [0.3, 0.87, 0.5], [0.42, 0.82, 0.4]],
   3: [[0.12, 0.97, 0.85], [0.25, 0.92, 0.6], [0.35, 0.87, 0.5]],
@@ -332,7 +354,7 @@ const BOTS = {
 const BOT_LOOK = [
   { name: '🤖 Комета', color: '#ff6f91', hero: 'maskot', tint: '#ff9dbb' },
   { name: '👾 Астра', color: '#8fd0ff', hero: 'ghost', tint: '#8fd0ff' },
-  { name: '🛸 Метеор', color: '#9be37a', hero: 'dancer', tint: '#9be37a' },
+  { name: '🛸 Метеор', color: '#9be37a', hero: 'ghost', tint: '#9be37a' },
 ];
 
 await ensureHero(profile.hero);
@@ -478,18 +500,19 @@ function showFinish() {
   state = 'done';
   const place = finished.findIndex((f) => f.id === myId) + 1;
   const stars = place === 1 ? 3 : place === 2 ? 2 : 1;
-  if (!ROOM) {
+  if (!ROOM && !def.custom) {
     progress.setStars('race', def.id, stars);
     progress.unlock('race', def.id + 1);
     progress.setBest('race', def.id, Math.round(10000 / (finished.find((f) => f.id === myId)?.t || 1e9)));
   }
   audio.sfx(place === 1 ? 'win' : 'clear');
   $('ov-title').textContent = place === 1 ? '🏆 Первое место!' : `🏁 Место: ${place}`;
-  $('ov-stars').textContent = ROOM ? '' : '⭐'.repeat(stars);
+  $('ov-stars').textContent = ROOM || def.custom ? '' : '⭐'.repeat(stars);
   drawTable();
   const nextOk = !ROOM && MAPS.race.levels.some((l) => l.id === def.id + 1);
   $('ov-buttons').innerHTML = ROOM
     ? '<a class="huge" href="lobby.html">👫 В лобби</a>'
+    : def.custom ? `<a class="huge" href="${esc(location.pathname.split('/').pop() + location.search)}">🔁 Ещё раз</a>${qs.get('edit') ? `<a class="huge rose" href="race-editor.html?edit=${encodeURIComponent(qs.get('edit'))}">🧱 В редактор</a>` : `<a class="huge rose" href="race-editor.html?code=${encodeURIComponent(qs.get('code'))}">🧱 Поменять</a>`}<a class="huge ghost" href="races.html">Трассы</a>`
     : `<a class="huge" href="race.html?level=${def.id}">🔁 Ещё раз</a>${nextOk ? `<a class="huge rose" href="race.html?level=${def.id + 1}">🚀 Следующая</a>` : ''}<a class="huge ghost" href="map.html?map=race">Трассы</a>`;
   $('overlay').classList.add('show');
 }
@@ -504,7 +527,8 @@ const camS = { x: 0, y: 3, shake: 0 };
 const dots = new Map();
 const clock = new THREE.Clock();
 const a3 = [0, 0, 0], b3 = [0, 0, 0], c3 = [0, 0, 0], d3 = [0, 0, 0];
-const up = new THREE.Vector3(), look = new THREE.Vector3();
+const up = new THREE.Vector3(), look = new THREE.Vector3(), look2 = new THREE.Vector3();
+let lookReady = false;
 let wasCount = '';
 
 function onEvents(ev) {
@@ -512,6 +536,7 @@ function onEvents(ev) {
     if (e === 'hit') { audio.sfx('hurt'); camS.shake = 0.5; toast('Ой! Врезался', 900); document.body.classList.add('hurt'); setTimeout(() => document.body.classList.remove('hurt'), 220); }
     if (e === 'wall') { audio.sfx('hit'); camS.shake = Math.max(camS.shake, 0.22); }
     if (e === 'boost') { audio.sfx('hop', 1.4); toast('🚀 Ускорение!', 700); }
+    if (e === 'fork') audio.sfx('jump');
     if (e === 'fin') {
       markFinish(myId, mine.p.fin);
       if (net && !isHost) net.send({ t: 'act', a: { k: 'fin', t: +mine.p.fin.toFixed(2) } });
@@ -527,11 +552,11 @@ function step(dt) {
   for (let i = 0; i < n; i++) {
     const h = dt / n;
     if (mine.p.fin) { input.x = 0; input.y = 0; input.brake = true; }
-    onEvents(stepRacer(mine.p, input, track, raceT, h));
+    onEvents(stepRacer(mine.p, input, course, raceT, h));
     for (const r of riders.values()) {
       if (!r.skill) continue;
-      botInput(r.p, track, raceT, r.skill, r.inp ||= { x: 0, y: 0, brake: false });
-      const ev = stepRacer(r.p, r.inp, track, raceT, h, r.skill.vmaxK);
+      botInput(r.p, course, raceT, r.skill, r.inp ||= { x: 0, y: 0, brake: false });
+      const ev = stepRacer(r.p, r.inp, course, raceT, h, r.skill.vmaxK);
       if (ev.some(([e]) => e === 'fin')) markFinish(r.id, r.p.fin);
     }
   }
@@ -559,7 +584,9 @@ function tick() {
     q.s += q.v * dt; p.v = q.v; p.vx = vx; p.vy = vy;
   }
   for (const r of riders.values()) r.place(r.p.s, r.p.x, r.p.y, r.p.vx, r.p.vy, r.p.v, dt);
-  const sp = mine.p;
+  const sp = mine.p, spTrack = routeOf(course, sp);
+  const nextFork = spTrack.forks[sp.nf || 0];
+  if (nextFork && !sp.forkTold && nextFork.s - sp.s < Math.max(70, sp.v * 1.6)) { sp.forkTold = true; toast('🔀 Развилка: рули в нужную сторону!', 1800); setTimeout(() => { sp.forkTold = false; }, 3000); }
   for (const s of spinners) s.hub.rotation.z = barAngle(s.o, raceT);
   for (const m of tumblers) { m.rotation.x += dt * 0.6; m.rotation.y += dt * 0.4; }
 
@@ -569,18 +596,22 @@ function tick() {
   camS.y += (sp.y * 0.62 + 3 - camS.y) * k;
   camS.shake = Math.max(0, camS.shake - dt * 1.6);
   const cs = Math.max(0, sp.s - 11);
-  sample(track, cs, track.pos, a3); sample(track, cs, track.right, b3); sample(track, cs, track.up, c3);
+  sample(spTrack, cs, spTrack.pos, a3); sample(spTrack, cs, spTrack.right, b3); sample(spTrack, cs, spTrack.up, c3);
   const sx = camS.shake ? (Math.random() - 0.5) * camS.shake * 2 : 0, sy = camS.shake ? (Math.random() - 0.5) * camS.shake * 2 : 0;
   camera.position.set(a3[0] + b3[0] * (camS.x + sx) + c3[0] * (camS.y + sy), a3[1] + b3[1] * (camS.x + sx) + c3[1] * (camS.y + sy), a3[2] + b3[2] * (camS.x + sx) + c3[2] * (camS.y + sy));
   up.set(c3[0], c3[1], c3[2]);
   camera.up.copy(up);
   const ls = sp.s + 24;
-  sample(track, ls, track.pos, d3); sample(track, ls, track.right, b3); sample(track, ls, track.up, c3);
-  look.set(d3[0] + b3[0] * sp.x * 0.5 + c3[0] * sp.y * 0.5, d3[1] + b3[1] * sp.x * 0.5 + c3[1] * sp.y * 0.5, d3[2] + b3[2] * sp.x * 0.5 + c3[2] * sp.y * 0.5);
+  sample(spTrack, ls, spTrack.pos, d3); sample(spTrack, ls, spTrack.right, b3); sample(spTrack, ls, spTrack.up, c3);
+  look2.set(d3[0] + b3[0] * sp.x * 0.5 + c3[0] * sp.y * 0.5, d3[1] + b3[1] * sp.x * 0.5 + c3[1] * sp.y * 0.5, d3[2] + b3[2] * sp.x * 0.5 + c3[2] * sp.y * 0.5);
+  // на развилке точка взгляда перескакивает на выбранную ветку: камера доворачивает плавно
+  if (course.routes.length > 1 && lookReady) look.lerp(look2, Math.min(1, dt * 7)); else look.copy(look2);
+  lookReady = true;
   camera.lookAt(look);
   const kv = Math.min(1.3, sp.v / def.vmax);
   const fov = 58 + 26 * kv * kv;
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+  if (window.__raceCam) window.__raceCam(camera);      // своя камера для ролика (tools/race-ad.mjs)
   sky.position.copy(camera.position);
 
   // панель
@@ -593,7 +624,7 @@ function tick() {
     if (fa >= 0 && fb >= 0) return fa - fb;
     if (fa >= 0) return -1;
     if (fb >= 0) return 1;
-    return b.p.s - a.p.s;
+    return b.p.s / routeOf(course, b.p).length - a.p.s / routeOf(course, a.p).length;
   });
   $('place').textContent = order.findIndex((r) => r.id === myId) + 1;
   for (const r of riders.values()) {
@@ -605,7 +636,7 @@ function tick() {
       $('track-bar').appendChild(d);
       dots.set(r.id, d);
     }
-    d.style.left = `${Math.min(100, (r.p.s / track.length) * 100)}%`;
+    d.style.left = `${Math.min(100, (r.p.s / routeOf(course, r.p).length) * 100)}%`;
   }
   for (const [id, d] of dots) if (!riders.has(id)) { d.remove(); dots.delete(id); }
   if ($('overlay').classList.contains('show')) drawTable();
@@ -636,4 +667,4 @@ $('loading').classList.add('done');
 $('place-of').textContent = riders.size;
 tick();
 toast(matchMedia('(pointer: coarse)').matches ? 'Лети пальцем слева, справа — тормоз. Быстрее — сильнее заносит!' : 'WASD или стрелки — лететь, пробел — тормоз. Быстрее — сильнее заносит!', 3500);
-if (qs.has('debug')) window.__race = { riders, get mine() { return mine; }, get state() { return state; }, track, finished, joy, camera, get raceT() { return raceT; }, get isHost() { return isHost; } };
+if (qs.has('debug')) window.__race = { riders, get mine() { return mine; }, get state() { return state; }, get track() { return routeOf(course, mine.p); }, course, finished, joy, camera, get raceT() { return raceT; }, get isHost() { return isHost; } };
