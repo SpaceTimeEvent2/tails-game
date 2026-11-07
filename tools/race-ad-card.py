@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Концовка ролика о гонке: QR и ссылка в безопасной зоне Shorts. Запуск: python3 tools/race-ad-card.py кадр.png"""
+"""Концовка ролика: QR и ссылка в безопасной зоне Shorts. Запуск: python3 tools/race-ad-card.py кадр.png [подзаголовок]"""
 import base64, io, json, os, subprocess, sys, tempfile
 import qrcode
 
 URL = 'https://spacecode.business/tails/'
 OUT = os.path.abspath(sys.argv[1])
+SUB = sys.argv[2] if len(sys.argv) > 2 else '🚀 Космическая гонка'
 q = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=16, border=3)
 q.add_data(URL); q.make(fit=True)
 b = io.BytesIO(); q.make_image(fill_color='#0b0d2c', back_color='white').save(b, 'PNG')
@@ -20,7 +21,7 @@ h1{{margin:0;font-size:136px;font-weight:900;line-height:1.05;background:linear-
 img{{width:620px;height:620px;image-rendering:pixelated;border-radius:34px;display:block;box-shadow:0 0 90px #6fe3ff88}}
 .u{{margin-top:44px;padding:18px 40px;border-radius:999px;background:#ffd447;color:#2a1f00;font-size:56px;font-weight:900}}
 .t{{margin-top:22px;font-size:40px;color:#d5e4ff;font-weight:700}}
-</style><h1>Хвосты</h1><div class=s>🚀 Космическая гонка</div><img src="{img}"><div class=u>spacecode.business/tails</div><div class=t>Наведи камеру на код</div>'''
+</style><h1>Хвосты</h1><div class=s>{SUB}</div><img src="{img}"><div class=u>spacecode.business/tails</div><div class=t>Наведи камеру на код</div>'''
 tmp = tempfile.mkdtemp(); f = os.path.join(tmp, 'c.html'); open(f, 'w', encoding='utf-8').write(html)
 js = f"""import puppeteer from 'puppeteer-core';
 const b=await puppeteer.launch({{executablePath:'/usr/bin/google-chrome',headless:'new',args:['--no-sandbox']}});const p=await b.newPage();

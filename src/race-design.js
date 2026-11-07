@@ -1,5 +1,6 @@
 /**
- * Своя трасса из блоков: поле 32×16×32, один блок — кусок тоннеля 28 ед.
+ * Своя трасса из блоков: поле 64×24×64, один блок — кусок тоннеля 28 ед.
+ * Код «r1» — старое поле 32×16×32 (его читает версия 1.7), «r2» — большое; трасса, что влезает в старое поле, пишется как r1.
  * Блоки соединяются гранями. Поток идёт от старта: дорога и преграды ведут вперёд, а блок «развилка» разводит
  * трассу на ветки и снова сводит их. Без графики — этим же модулем сервер проверяет присланные трассы.
  *
@@ -7,7 +8,8 @@
  */
 import { buildTrack, fillObstacle, rng, sample } from './race-sim.js';
 
-export const W = 32, H = 16, CELL = 28, MAX_BLOCKS = 600, MIN_BLOCKS = 8, MAX_ROUTES = 16;
+export const W = 64, H = 24, CELL = 28, MAX_BLOCKS = 1200, MIN_BLOCKS = 8, MAX_ROUTES = 16;
+const W1 = 32, H1 = 16, MAX1 = 600;      // поле и предел кода r1
 export const BLOCKS = [
   { id: 'path', name: 'Дорога', icon: '🟦' },
   { id: 'start', name: 'Старт', icon: '🟢' },
@@ -36,25 +38,32 @@ export const inField = (x, y, z) => x >= 0 && x < W && z >= 0 && z < W && y >= 0
 
 export const newDesign = () => ({ a: Math.floor(Math.random() * 16), b: Math.floor(Math.random() * 16), d: 'easy', blocks: new Map() });
 
-/* ── код трассы: «r1», название, сложность и по три знака на блок ── */
+/* ── код трассы: «r1»/«r2», название, сложность и по 3 (r1) или 4 (r2) знака на блок ── */
 const ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 export function encode(d) {
-  const vals = [...d.blocks].map(([k, t]) => k * 16 + t).sort((x, y) => x - y);
-  let s = `r1${ABC[d.a & 15]}${ABC[d.b & 15]}${ABC[Math.max(0, DIFF_IDS.indexOf(d.d))]}`;
-  for (const v of vals) s += ABC[v >> 12] + ABC[(v >> 6) & 63] + ABC[v & 63];
+  const list = [...d.blocks].map(([k, t]) => [xyzOf(k), t]);
+  const small = list.length <= MAX1 && list.every(([[x, y, z]]) => x < W1 && z < W1 && y < H1);
+  const vals = list.map(([[x, y, z], t]) => (small ? x + z * W1 + y * W1 * W1 : keyOf(x, y, z)) * 16 + t).sort((p, q) => p - q);
+  let s = `r${small ? 1 : 2}${ABC[d.a & 15]}${ABC[d.b & 15]}${ABC[Math.max(0, DIFF_IDS.indexOf(d.d))]}`;
+  for (const v of vals) s += (small ? '' : ABC[(v >> 18) & 63]) + ABC[(v >> 12) & 63] + ABC[(v >> 6) & 63] + ABC[v & 63];
   return s;
 }
 export function decode(code) {
-  const s = String(code || '').trim();
-  if (!s.startsWith('r1') || s.length < 5 || (s.length - 5) % 3 || s.length > 5 + MAX_BLOCKS * 3) return null;
+  const s = String(code || '').trim(), ver = s.slice(0, 2), n = ver === 'r1' ? 3 : ver === 'r2' ? 4 : 0;
+  if (!n || s.length < 5 || (s.length - 5) % n || s.length > 5 + MAX_BLOCKS * n) return null;
   const nums = [];
-  for (let i = 2; i < s.length; i++) { const n = ABC.indexOf(s[i]); if (n < 0) return null; nums.push(n); }
+  for (let i = 2; i < s.length; i++) { const c = ABC.indexOf(s[i]); if (c < 0) return null; nums.push(c); }
   const [a, b, di] = nums;
   if (a > 15 || b > 15 || di >= DIFF_IDS.length) return null;
   const blocks = new Map();
-  for (let i = 3; i < nums.length; i += 3) {
-    const v = (nums[i] << 12) | (nums[i + 1] << 6) | nums[i + 2], t = v & 15, k = v >> 4;
-    if (t >= BLOCKS.length || blocks.has(k)) return null;
+  for (let i = 3; i < nums.length; i += n) {
+    let v = 0;
+    for (let j = 0; j < n; j++) v = v * 64 + nums[i + j];
+    const t = v & 15, q = Math.floor(v / 16);
+    const [x, y, z] = n === 3 ? [q % W1, Math.floor(q / (W1 * W1)), Math.floor(q / W1) % W1] : [q % W, Math.floor(q / (W * W)), Math.floor(q / W) % W];
+    if (t >= BLOCKS.length || !inField(x, y, z)) return null;
+    const k = keyOf(x, y, z);
+    if (blocks.has(k)) return null;
     blocks.set(k, t);
   }
   return { a, b, d: DIFF_IDS[di], blocks };

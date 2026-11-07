@@ -78,7 +78,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x05061a);
 scene.fog = new THREE.FogExp2(0x05061a, 0.0032);
-const camera = new THREE.PerspectiveCamera(60, 1, 0.3, 2600);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.3, 4200);
 scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x30204a, 1.5));
 const sun = new THREE.DirectionalLight(0xfff2d8, 2.4);
 sun.position.set(0.5, 1, -0.6);
@@ -410,7 +410,7 @@ syncRoster();
 const shots = [];
 const shotGeo = new THREE.CylinderGeometry(0.22, 0.22, 3.2, 8);
 shotGeo.rotateX(Math.PI / 2);
-const sparkGeo = new THREE.IcosahedronGeometry(1.2, 0);
+const sparkGeo = new THREE.IcosahedronGeometry(0.7, 1);
 const sparks = [];
 let shotSeq = 0;
 const seenShots = new Set();
@@ -483,7 +483,7 @@ function drawShots(dt) {
   for (let i = sparks.length - 1; i >= 0; i--) {
     const m = sparks[i];
     m.life -= dt;
-    m.scale.setScalar(1 + (0.35 - m.life) * 6);
+    m.scale.setScalar(1 + (0.35 - m.life) * 3.5);
     m.material.opacity = Math.max(0, m.life / 0.35);
     if (m.life <= 0) { scene.remove(m); m.material.dispose(); sparks.splice(i, 1); }
   }

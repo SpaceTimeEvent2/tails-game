@@ -13,6 +13,12 @@ for (const d of EXAMPLES) {
   const back = decode(encode(d));
   check(back && encode(back) === encode(d) && back.d === d.d && trackName(back) === trackName(d), `код туда и обратно: ${trackName(d)} (${encode(d).length} знаков)`);
 }
+{
+  const big = new Map([[keyOf(50, 20, 60), T.start]]); line(big, [50, 20, 60], [-1, 0, 0], 40);
+  const c = encode({ a: 1, b: 2, d: 'hard', blocks: big }), back = decode(c);
+  check(c.startsWith('r2') && back && back.blocks.size === big.size && back.blocks.get(keyOf(50, 20, 60)) === T.start && encode(back) === c, `большое поле 64×24×64: код r2 туда и обратно (${c.length} знаков)`);
+  check(encode(EXAMPLES[0]).startsWith('r1'), 'трасса из старого поля пишется по-старому (r1): её читает версия 1.7');
+}
 check(decode('r1AAA' + '!!!') === null && decode('zzz') === null && decode('r1AAAA') === null && decode('') === null, 'испорченный код не принимается');
 
 /* змейка из соседних рядов не срезается */

@@ -25,7 +25,7 @@ if (qs.get('edit')) { const it = myRaces.get(qs.get('edit')); if (it) { design =
 if (!design && qs.get('code')) design = decode(qs.get('code'));   // чужая трасса или пример: правится копия, оригинал не меняется
 if (!design) {
   design = newDesign();
-  design.blocks.set(keyOf(W >> 1, 0, 4), T.start);
+  design.blocks.set(keyOf(16, 0, 4), T.start);     // в старом поле 32×32: короткая трасса читается и версией 1.7
 }
 const blocks = design.blocks;
 
@@ -402,4 +402,5 @@ function tick() {
 refresh(false);
 setTool(T.path);
 tick();
-if (qs.has('debug')) window.__ed = { design, blocks, camera, pickAt, setTool, undo, T, xyzOf, keyOf, get analysis() { return analysis; }, get saveId() { return saveId; }, look(y, p) { yaw = y; pitch = p; } };
+if (qs.has('debug')) window.__ed = { design, blocks, camera, pickAt, setTool, undo, T, xyzOf, keyOf, get analysis() { return analysis; }, get saveId() { return saveId; }, look(y, p) { yaw = y; pitch = p; },
+  put(k, t) { if (t < 0) blocks.delete(k); else blocks.set(k, t); refresh(); } };

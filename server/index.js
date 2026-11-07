@@ -69,7 +69,7 @@ function tracksApi(req, res, url) {
     return true;
   }
   if (req.method === 'POST' && url === '/api/tracks') {
-    readBody(req, 4000, (body) => {
+    readBody(req, 6000, (body) => {
       const d = body === null ? null : decodeTrack(body);
       if (!d || !analyzeTrack(d).ok) { json(res, 400, { error: 'Трасса не готова' }); return; }
       const code = encodeTrack(d), id = trackId(code), had = tracks.find((t) => t.id === id);
@@ -285,7 +285,7 @@ wss.on('connection', (ws, req) => {
           if (level) { map = { id: 'custom' }; lv = m.lv; }
         }
         if (m.map === 'track') {           // своя трасса гонки из конструктора: проверяем так же, как при публикации
-          const d = typeof m.lv === 'string' && m.lv.length < 4000 ? decodeTrack(m.lv) : null;
+          const d = typeof m.lv === 'string' && m.lv.length < 6000 ? decodeTrack(m.lv) : null;
           if (d && analyzeTrack(d).ok) { level = { id: 0, name: trackName(d) }; map = { id: 'track' }; lv = encodeTrack(d); }
         }
         if (!level) { send(ws, { t: 'error', msg: 'Нет такого уровня' }); break; }
