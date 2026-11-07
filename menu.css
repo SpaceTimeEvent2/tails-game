@@ -125,7 +125,7 @@ input.code { text-transform: uppercase; letter-spacing: 5px; width: 6.6em; flex:
 .stage .hint { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 13px; color: #cfe6f0; pointer-events: none; }
 .choose { display: flex; flex-direction: column; justify-content: space-between; gap: clamp(5px, 1.4vh, 14px); min-height: 0; overflow: hidden; padding: clamp(8px, 1.8vh, 18px) clamp(10px, 1.2vw, 18px);
           background: #0c2c44d0; border: 1px solid #ffffff26; border-radius: clamp(14px, 3vh, 26px); }
-.heroes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.heroes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .heroes button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: clamp(36px, 10vh, 64px); border-radius: 14px; border: 2px solid #ffffff26; background: #ffffff10; color: #fff;
                  font-weight: 800; font-size: clamp(14px, 3vh, 18px); }
 .heroes button.on { border-color: var(--mimosa); background: #ffd44726; }

@@ -20,12 +20,20 @@ body { touch-action: none; user-select: none; -webkit-user-select: none; }
 #brake-zone span { padding: 16px 22px; border-radius: 20px; background: #06192bbb; border: 2px solid #ffffff44; color: #fff; font: 800 18px var(--font); backdrop-filter: blur(6px); }
 #brake-zone.on span { background: linear-gradient(180deg, #ff8a6b, #e0472e); border-color: #fff; }
 @media (pointer: coarse) { #brake-zone { display: flex; } }
-#fire { position: fixed; z-index: 6; right: calc(18px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); width: 78px; height: 78px; border-radius: 50%;
+#fire { position: fixed; overflow: visible; z-index: 6; right: calc(18px + env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); width: 78px; height: 78px; border-radius: 50%;
   border: 3px solid #fff; background: radial-gradient(circle at 40% 35%, #ff8a6b, #d0302a); color: #fff; font: 800 26px/1 var(--font); display: grid; place-items: center; align-content: center; gap: 1px; touch-action: none; cursor: pointer; box-shadow: 0 6px 18px #0008; }
 #fire small { font-size: 12px; }
 #fire.cool { filter: grayscale(.7) brightness(.75); }
+#fire .bomb { position: absolute; top: -6px; right: -6px; font-size: 22px; font-style: normal; display: none; filter: drop-shadow(0 2px 2px #000a); }
+#fire.has-bomb .bomb { display: block; }
+#fire.charging::after { content: ''; position: absolute; inset: -9px; border-radius: 50%; border: 5px solid #39ff6a; clip-path: inset(0 0 100% 0); animation: charge .8s linear forwards; }
+@keyframes charge { to { clip-path: inset(0 0 0 0); } }
 @media (pointer: fine) { #fire { width: 64px; height: 64px; font-size: 22px; } }
 @media (max-height: 520px) { #fire { bottom: calc(76px + env(safe-area-inset-bottom)); width: 70px; height: 70px; } }
+#replay-bar { position: fixed; z-index: 6; left: 50%; top: calc(max(8px, env(safe-area-inset-top)) + 52px); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; background: #06192bcc; color: #fff; font: 800 15px var(--font); }
+#replay-bar[hidden] { display: none; }
+#replay-bar .round { width: 46px; height: 46px; padding: 0; font-size: 18px; }
+body.replay #fire, body.replay #brake-zone, body.replay #joy, body.replay #drift-chip { display: none !important; }
 #overlay table { border-collapse: collapse; color: #fff; font-size: 16px; }
 #ov-table { display: grid; gap: 4px; min-width: min(360px, 80vw); }
 #ov-table .r { display: flex; align-items: center; gap: 10px; padding: 5px 12px; border-radius: 12px; background: #ffffff14; border: 2px solid transparent; font-size: 15px; text-align: left; }

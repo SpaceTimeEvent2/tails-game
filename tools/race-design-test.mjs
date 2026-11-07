@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Трассы из блоков без графики: код, развилки и слияния, змейка, примеры, боты не пролетают сквозь преграды. node tools/race-design-test.mjs */
 import { EXAMPLES, analyze, autoComplete, buildCourse, decode, encode, keyOf, trackName, T, DIFFS, CELL } from '../src/race-design.js';
-import { newRacer, stepRacer, botInput, hits, routeOf, fire, stepShot, shotHits, zap, botAims, TUBE_R, BODY_R } from '../src/race-sim.js';
+import { newRacer, stepRacer, botInput, hits, routeOf, fire, stepShot, shotHits, zap, botAims, mudBomb, TUBE_R, BODY_R } from '../src/race-sim.js';
 
 let fails = 0;
 const check = (ok, what) => { console.log(`${ok ? '✔' : '✘'} ${what}`); if (!ok) fails++; };
@@ -142,6 +142,15 @@ for (const d of EXAMPLES) {
   const sh3 = { route: 0, s: o.s - 10, x: Math.cos(o.a) * 6, y: Math.sin(o.a) * 6, v: 150, t: 0, dead: null };
   for (let t = 0; t < 1 && !sh3.dead; t += 1 / 60) stepShot(sh3, course, t, 1 / 60);
   check(sh3.dead === 'wall', 'стена останавливает заряд');
+  // грязь: скорость падает и 2,5 с не поднимается выше половины, потом разгон как обычно
+  {
+    const p = { ...newRacer(0), s: 100, v: 80, next: 99 }, fr = { ...course, routes: [{ ...tr, obstacles: [] }] }, vm = tr.def.vmax;
+    mudBomb(p);
+    let maxIn = 0;
+    for (let t = 0; t < 2.4; t += 1 / 60) { stepRacer(p, { x: 0, y: 0, brake: false }, fr, t, 1 / 60); maxIn = Math.max(maxIn, p.v); p.x = p.y = 0; }
+    for (let t = 0; t < 8; t += 1 / 60) { stepRacer(p, { x: 0, y: 0, brake: false }, fr, t, 1 / 60); p.x = p.y = 0; }
+    check(maxIn <= 80 * 0.6 + 0.5 && p.v > vm * 0.6, `грязевая бомба: в грязи не быстрее ${maxIn.toFixed(0)}, потом разгон до ${p.v.toFixed(0)}`);
+  }
   check(botAims({ s: 100, x: 0, y: 0 }, [{ s: 160, x: 1, y: 0 }]) && !botAims({ s: 100, x: 0, y: 0 }, [{ s: 160, x: 6, y: 0 }]), 'бот целится только в того, кто на линии впереди');
 }
 console.log(fails ? `\nошибок: ${fails}` : '\nошибок: 0');

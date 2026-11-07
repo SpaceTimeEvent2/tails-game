@@ -324,8 +324,18 @@ const ls = () => (typeof localStorage !== 'undefined' ? localStorage : null);
 const get = (k, d) => { try { const v = ls()?.getItem(k); return v === null || v === undefined ? d : v; } catch (e) { return d; } };
 const set = (k, v) => { try { ls()?.setItem(k, String(v)); } catch (e) { /* без памяти */ } };
 
+/* Кто уже играл до 1.9 (на телефоне есть сохранения «tg.»), тому открыты все уровни; новые игроки проходят по порядку.
+   Отметка ставится один раз при первом запуске этой версии. */
+(() => {
+  const s = ls();
+  if (!s || s.getItem('tg.allOpen') !== null) return;
+  let old = false;
+  for (let i = 0; i < s.length; i++) if (/^tg\./.test(s.key(i) || '')) { old = true; break; }
+  set('tg.allOpen', old ? 1 : 0);
+})();
+
 export const progress = {
-  unlocked(map) { return Number(get(`tg.${map}.unlocked`, 1)); },
+  unlocked(map) { return get('tg.allOpen', '0') === '1' ? mapById(map).levels.length : Number(get(`tg.${map}.unlocked`, 1)); },
   unlock(map, id) {
     if (id > this.unlocked(map) && id <= mapById(map).levels.length) set(`tg.${map}.unlocked`, id);
   },

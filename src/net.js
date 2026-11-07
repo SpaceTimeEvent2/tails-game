@@ -5,7 +5,7 @@
  */
 export const COLORS = ['#ffd447', '#ff6f91', '#8fd0ff', '#9be37a', '#c7b0ff', '#ffa45c'];
 export const EMOJIS = ['🦊', '🐱', '🐬', '🐢', '🦄', '🐝', '🐙', '🐸', '🐼', '🦁', '🐵', '🐧', '🦉', '🦖', '🐰', '🐯'];
-export const HERO_IDS = ['dancer', 'maskot', 'ghost'];
+export const HERO_IDS = ['maskot', 'ghost'];          // Танцовщицу (Tiny Dancer) игроку больше не предлагаем
 export const SHIP_IDS = ['wedge', 'arrow', 'delta'];          // корабль в гонке (src/ships.js)
 export const TINTS = ['', '#ff9dbb', '#8fd0ff', '#9be37a', '#ffe07a', '#c7b0ff', '#ffa45c', '#8b8fa8'];   // цвет поверх текстуры, '' — как есть
 

@@ -42,7 +42,17 @@ const flying = (page) => page.waitForFunction(() => window.__race.state === 'go'
   await page.screenshot({ path: path.join(SHOTS, 'race-menu.png') });
   await page.goto(`${BASE}/map.html?map=race`);
   const lv = await page.$$eval('#levels .lvl', (els) => els.map((e) => [e.tagName, e.getAttribute('href')]));
-  check(lv.length === 4 && lv[0][1] === 'race.html?level=1' && lv[1][0] === 'DIV' && lv[3][1] === 'races.html', `три трассы, открыта первая, рядом трассы игроков (${lv.length})`);
+  check(lv.length === 4 && lv[0][1] === 'race.html?level=1' && lv[1][0] === 'DIV' && lv[3][1] === 'races.html', `новый игрок: открыта первая трасса, остальные по порядку (${lv.length})`);
+  // кто уже играл до этой версии — у того открыто всё
+  const ctx2 = await browser.createBrowserContext(), old = await ctx2.newPage();
+  await old.goto(`${BASE}/style.css`);
+  await old.evaluate(() => localStorage.setItem('tg.quay.stars.1', '2'));
+  await old.goto(`${BASE}/map.html?map=race`);
+  const lv2 = await old.$$eval('#levels .lvl', (els) => els.filter((e) => e.classList.contains('locked')).length);
+  await old.goto(`${BASE}/map.html?map=castle`);
+  const lv3 = await old.$$eval('#levels .lvl', (els) => els.filter((e) => e.classList.contains('locked')).length);
+  check(lv2 === 0 && lv3 === 0 && await old.evaluate(() => localStorage.getItem('tg.allOpen')) === '1', 'тому, кто играл раньше, открыты все уровни');
+  await ctx2.close();
   await ctx.close();
 }
 
@@ -96,6 +106,22 @@ const flying = (page) => page.waitForFunction(() => window.__race.state === 'go'
     check(fired && z > 0, `кнопка «Огонь» вторым пальцем стреляет, бот впереди замедлен (${fired}, ${z.toFixed(2)})`);
     await page.screenshot({ path: path.join(SHOTS, 'race-shot.png') });
   }
+  // грязевая бомба: держим «Огонь» — у ботов грязь и чёрные сферы, у себя зелёная, второй раз нельзя
+  {
+    await page.evaluate(() => { const R = window.__race; R.mine.p.gun = 0; for (const r of R.riders.values()) { r.p.mud = 0; if (!r.isMe) r.p.bombUsed = true; } });
+    const has = await page.$eval('#fire', (e) => e.classList.contains('has-bomb'));
+    const b = await page.$eval('#fire', (e) => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+    await touch('touchStart', [[b[0], b[1], 3]]);
+    await sleep(1100);
+    const st = await page.evaluate(() => { const R = window.__race; return [R.mine.p.bombUsed, [...R.riders.values()].filter((r) => !r.isMe).every((r) => r.p.mud > 0), R.mine.p.mud || 0,
+      [...R.riders.values()].map((r) => r.r.root.children.filter((c) => c.geometry && c.geometry.type === 'SphereGeometry').map((c) => c.material.color.getHexString())).flat()]; });
+    await touch('touchEnd', []);
+    await page.screenshot({ path: path.join(SHOTS, 'race-bomb.png') });
+    check(has && st[0] && st[1] && st[2] === 0 && st[3].includes('39ff6a') && st[3].includes('050505'), `держишь «Огонь» — грязевая бомба: соперники в грязи, сферы ${[...new Set(st[3])].join(', ')}`);
+    await page.evaluate(() => { for (const r of window.__race.riders.values()) r.p.mud = 0; });
+    await touch('touchStart', [[b[0], b[1], 3]]); await sleep(1100); await touch('touchEnd', []);
+    check(await page.evaluate(() => [...window.__race.riders.values()].filter((r) => !r.isMe).every((r) => !(r.p.mud > 0))) && !(await page.$eval('#fire', (e) => e.classList.contains('has-bomb'))), 'вторую бомбу на этой трассе бросить нельзя');
+  }
   // боты стреляют сами
   {
     const ok = await page.evaluate(async () => {
@@ -124,13 +150,30 @@ const flying = (page) => page.waitForFunction(() => window.__race.state === 'go'
     localStorage.getItem('tg.race.stars.1'), localStorage.getItem('tg.race.unlocked')]);
   check(/Первое/.test(fin[0]) && fin[2] === 4 && fin[3] === '3' && fin[4] === '2', `финиш: ${fin[0]}, таблица ${fin[2]}, звёзд ${fin[3]}, открыта трасса ${fin[4]}`);
   await page.screenshot({ path: path.join(SHOTS, 'race-finish.png') });
+  // запись гонки: сохранилась на телефоне, повтор показывает тех же гонщиков в движении
+  const rep = await page.evaluate(() => { const l = JSON.parse(localStorage.getItem('tg.replays') || '[]'); const r = l[0] && JSON.parse(localStorage.getItem('tg.replay.' + l[0].id)); return l[0] ? [l[0].id, l[0].place, r.riders.length, Object.values(r.frames)[0].d.length / 5, (localStorage.getItem('tg.replay.' + l[0].id) || '').length] : null; });
+  check(rep && rep[1] === 1 && rep[2] === 4 && rep[3] > 20 && await page.$('#btn-replay') !== null, `гонка записана: место ${rep && rep[1]}, гонщиков ${rep && rep[2]}, кадров ${rep && rep[3]}, ${rep && Math.round(rep[4] / 1024)} КБ`);
+  await page.$eval('#btn-replay', (a) => a.click());
+  await page.waitForFunction(() => location.search.includes('replay=') && window.__race && document.getElementById('loading').classList.contains('done'), { timeout: 120000 });
+  const q0 = await page.evaluate(() => [window.__race.playT, [...window.__race.riders.values()].map((r) => r.p.s)]);
+  await sleep(1200);
+  const q1 = await page.evaluate(() => [window.__race.playT, [...window.__race.riders.values()].map((r) => r.p.s), document.body.classList.contains('replay'), getComputedStyle(document.getElementById('fire')).display]);
+  check(q1[0] > q0[0] + 0.5 && q1[1].some((s, i) => s > q0[1][i] + 1) && q1[2] && q1[3] === "none", `повтор идёт: время ${q0[0].toFixed(1)} → ${q1[0].toFixed(1)} с, корабли летят, кнопки «Огонь» нет`);
+  await page.$eval('#rp-play', (b) => b.click());
+  const t0 = await page.evaluate(() => window.__race.playT); await sleep(600);
+  check(await page.evaluate((t) => Math.abs(window.__race.playT - t) < 0.01, t0), 'пауза останавливает повтор');
+  await page.$eval('#rp-play', (b) => b.click());
+  await page.screenshot({ path: path.join(SHOTS, 'race-replay.png') });
+  await page.goto(`${BASE}/races.html#replays`);
+  await page.waitForFunction(() => document.querySelector('#levels .lvl a.fill[href*="replay="]'), { timeout: 5000 }).catch(() => {});
+  check(await page.$('#levels a.fill[href*="replay="]') !== null, 'запись видна во вкладке «📼 Записи»');
   await ctx.close();
 }
 
 /* ── два игрока через комнату ── */
 {
   const a = await phone('Аня'), b = await phone('Боря');
-  for (const [pl, n, c, h] of [[a, 'Аня', '#ff6f91', 'ghost'], [b, 'Боря', '#8fd0ff', 'dancer']]) {
+  for (const [pl, n, c, h] of [[a, 'Аня', '#ff6f91', 'ghost'], [b, 'Боря', '#8fd0ff', 'maskot']]) {
     await pl.page.goto(`${BASE}/index.html`);
     await pl.page.evaluate((n, c, h) => localStorage.setItem('tg.me', JSON.stringify({ name: n, color: c, emoji: '🦊', hero: h })), n, c, h);
   }

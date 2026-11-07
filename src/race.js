@@ -10,9 +10,10 @@ import { Runner, Joystick, loadRunnerModel } from './runner.js';
 import { Net, me as myProfile, COLORS } from './net.js';
 import { MAPS, progress } from './levels.js';
 import { audio } from './audio.js';
-import { TUBE_R, buildTrack, sample, barAngle, newRacer, stepRacer, botInput, routeOf, fire, stepShot, shotHits, zap, botAims, worldAt, SHOT } from './race-sim.js';
+import { TUBE_R, buildTrack, sample, barAngle, newRacer, stepRacer, botInput, routeOf, fire, stepShot, shotHits, zap, botAims, worldAt, SHOT, mudBomb, BOMB } from './race-sim.js';
 import { buildCourse, decode as decodeTrack, W as FIELD, CELL as FIELD_CELL } from './race-design.js';
 import { makeShip } from './ships.js';
+import { replays } from './replays.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -32,8 +33,13 @@ function toast(text, ms = 2200) {
   toast.t = setTimeout(() => el.classList.remove('show'), ms);
 }
 
+/* ── повтор записанной гонки (src/replays.js): та же трасса, гонщики летят по записанным координатам ── */
+const replay = qs.get('replay') ? replays.get(qs.get('replay')) : null;
+if (qs.get('replay') && !replay) failPage('Эта запись не найдена');
+if (replay) document.body.classList.add('replay');
+
 /* ── комната или одиночная гонка ── */
-const ROOM = (qs.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+const ROOM = replay ? '' : (qs.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
 let net = null, room = null, myId = 1, isHost = !ROOM;
 let def = null;
 if (ROOM) {
@@ -54,14 +60,14 @@ if (ROOM) {
   }
   $('btn-home').href = 'lobby.html';
   $('btn-home').addEventListener('click', () => net.send({ t: 'leave' }));
-} else if (!qs.get('code')) {
-  def = MAPS.race.levels.find((l) => l.id === Number(qs.get('level'))) || MAPS.race.levels[0];
+} else if (!(replay ? replay.src.code : qs.get('code'))) {
+  def = MAPS.race.levels.find((l) => l.id === Number(replay ? replay.src.level : qs.get('level'))) || MAPS.race.levels[0];
 }
 // своя трасса из блоков (race-design.js): несколько путей; у готовых трасс путь один
 let course;
 if (def) course = { routes: [buildTrack(def)] };
 else {
-  const design = decodeTrack(ROOM ? room.lv : qs.get('code'));
+  const design = decodeTrack(ROOM ? room.lv : replay ? replay.src.code : qs.get('code'));
   course = design && buildCourse(design);
   if (!course) failPage('Эта трасса не открывается');
   def = course.def;
@@ -298,9 +304,9 @@ flameGeo.rotateX(-Math.PI / 2);         // основание у двигате�
 /** Гонщик: треугольный корабль, выбранный в профиле, в цвете игрока; из сопел бьют реактивные струи. */
 class Rider {
   constructor({ id, color, name, hero, tint, ship, isMe, racer, skill }) {
-    this.id = id; this.color = color; this.name = name; this.isMe = isMe; this.emoji = name;
+    this.id = id; this.color = color; this.name = name; this.isMe = isMe; this.emoji = name; this.ship = ship;
     this.p = racer; this.skill = skill;
-    this.r = new Runner(scene, { color, name: isMe ? '' : name, me: isMe, hero: loaded.has(hero) || hero === 'ghost' ? hero : 'dancer', tint });
+    this.r = new Runner(scene, { color, name: isMe ? '' : name, me: isMe, hero: loaded.has(hero) || hero === 'ghost' ? hero : 'maskot', tint });
     const r = this.r;
     r.ring.visible = false;
     r.mixer.stopAllAction();
@@ -369,7 +375,7 @@ const BOT_LOOK = [
 ];
 
 await ensureHero(profile.hero);
-await ensureHero('dancer');
+await ensureHero('maskot');
 $('load-bar').style.width = '60%';
 if (ROOM) for (const p of room.players) await ensureHero(p.hero);
 else await ensureHero('maskot');
@@ -381,8 +387,17 @@ function addMe() {
   riders.set(myId, rider);
   mine = rider;
 }
-addMe();
-if (!ROOM) {
+if (replay) {                           // гонщики из записи: летят по координатам, без физики
+  for (const rr of replay.riders) {
+    const r = new Rider({ id: rr.id, color: rr.color, name: rr.name, ship: rr.ship, isMe: !!rr.me, racer: newRacer(0) });
+    r.play = replay.frames[rr.id];
+    riders.set(rr.id, r);
+    if (rr.me) mine = r;
+  }
+  mine ||= riders.values().next().value;
+  myId = mine.id;
+} else addMe();
+if (!ROOM && !replay) {
   BOTS.forEach(([miss, vmaxK, sloppy], i) => {
     const l = BOT_LOOK[i];
     riders.set(-(i + 1), new Rider({ id: -(i + 1), color: l.color, name: l.name, hero: l.hero, tint: l.tint, ship: l.ship, racer: newRacer(i + 1), skill: { miss, vmaxK, sloppy, seed: i + 3 } }));
@@ -419,6 +434,7 @@ function spawnShot(sh, color) {
   sh.mesh = new THREE.Mesh(shotGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.35) }));
   scene.add(sh.mesh);
   shots.push(sh);
+  if (recorder) recorder.shots.push([+raceT.toFixed(2), Math.round(sh.s), +sh.x.toFixed(1), +sh.y.toFixed(1), sh.route, sh.owner, Math.round(sh.v)]);
 }
 function spark(sh, color) {
   const tr = routeOf(course, { route: sh.route });
@@ -429,6 +445,7 @@ function spark(sh, color) {
   sparks.push(m);
 }
 function shoot(rider) {
+  if (replay) return false;              // в повторе выстрелы только из записи
   const sh = fire(rider.p, rider.id);
   if (!sh) return false;
   sh.id = `${myId}.${++shotSeq}`;
@@ -450,6 +467,53 @@ function remoteShot(m, from) {
   const r = riders.get(from);
   spawnShot({ owner: from, route: m.r, s: m.s, x: m.x, y: m.y, v: m.v, t: 0, dead: null, id: m.id }, r ? r.color : '#ffffff');
 }
+/* ── грязевая бомба: вокруг запустившего ярко-зелёная сфера, вокруг остальных — чёрная полупрозрачная ── */
+const bombGeo = new THREE.SphereGeometry(4.2, 22, 14);
+const bombFx = [];
+const relayBombs = [];
+function bomb(rider) {
+  if (replay || state !== 'go' || !rider || rider.p.bombUsed || rider.p.fin) return false;
+  rider.p.bombUsed = true;
+  const id = `${myId}.b${++shotSeq}`;
+  applyBomb(rider.id, id);
+  if (rider.isMe && net) {
+    if (isHost) relayBombs.push({ id, from: myId, at: performance.now() }); else net.send({ t: 'act', a: { k: 'bomb', id } });
+  }
+  return true;
+}
+/** Взрыв от гонщика from: замедляем тех, кем управляем сами (себя и ботов), сферы рисуем у всех. visual — только картинка (повтор). */
+function applyBomb(from, id, visual = false) {
+  if (seenShots.has(id) && !visual) return;
+  seenShots.add(id);
+  const who = riders.get(from);
+  if (who) who.p.bombUsed = true;
+  for (const r of riders.values()) {
+    const own = r.id === from;
+    const m = new THREE.Mesh(bombGeo, new THREE.MeshBasicMaterial(own
+      ? { color: 0x39ff6a, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }
+      : { color: 0x050505, transparent: true, opacity: 0.55, depthWrite: false }));
+    m.scale.setScalar(0.1);
+    r.r.root.add(m);
+    bombFx.push({ m, t: 0, life: own ? 1.2 : BOMB.mud });
+    if (!own && !visual && (r.isMe || r.skill)) mudBomb(r.p);
+  }
+  if (recorder) recorder.bombs.push([+raceT.toFixed(2), from]);
+  if (visual) return;
+  audio.sfx('hurt', 0.6); audio.sfx('hit', 0.5);
+  if (from === myId) toast('💣 Грязевая бомба! Все соперники в грязи', 1600);
+  else { toast(`💣 ${who ? who.name : 'Кто-то'} взорвал грязевую бомбу!`, 1800); camS.shake = 0.45; }
+  $('fire').classList.toggle('has-bomb', !mine.p.bombUsed);
+}
+function drawBombs(dt) {
+  for (let i = bombFx.length - 1; i >= 0; i--) {
+    const f = bombFx[i];
+    f.t += dt;
+    f.m.scale.setScalar(Math.min(1.15, 0.1 + f.t * 3));
+    f.m.material.opacity = 0.55 * Math.min(1, (f.life - f.t) / 0.6);
+    if (f.t >= f.life) { f.m.parent?.remove(f.m); f.m.material.dispose(); bombFx.splice(i, 1); }
+  }
+}
+
 function stepShots(dt) {
   for (const sh of shots) {
     if (sh.dead) continue;
@@ -480,6 +544,7 @@ function drawShots(dt) {
     sh.mesh.position.set(...a);
     sh.mesh.lookAt(b[0], b[1], b[2]);
   }
+  drawBombs(dt);
   for (let i = sparks.length - 1; i >= 0; i--) {
     const m = sparks[i];
     m.life -= dt;
@@ -496,7 +561,10 @@ const keys = new Set();
 let brakeHold = false;
 addEventListener('keydown', (e) => {
   if (/^(KeyW|KeyA|KeyS|KeyD|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Space|ShiftLeft|ShiftRight)$/.test(e.code)) { keys.add(e.code); e.preventDefault(); }
-  if ((e.code === 'KeyF' || e.code === 'KeyE' || e.code === 'Enter') && !e.repeat && state === 'go') shoot(mine);
+  if ((e.code === 'KeyF' || e.code === 'KeyE' || e.code === 'Enter') && state === 'go') {
+    if (!e.repeat) { shoot(mine); keyHold = performance.now(); } else if (performance.now() - keyHold > 800) bomb(mine);
+  }
+  if (e.code === 'KeyB' && state === 'go') bomb(mine);
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
@@ -506,8 +574,21 @@ addEventListener('blur', () => keys.clear());
   z.addEventListener('pointerdown', (e) => { e.preventDefault(); z.setPointerCapture(e.pointerId); set(true); });
   for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) z.addEventListener(n, () => set(false));
 }
-// огонь в момент касания: второй палец рулит джойстиком, и click браузер не пришлёт
-$('fire').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); if (state === 'go') shoot(mine); });
+// огонь в момент касания: второй палец рулит джойстиком, и click браузер не пришлёт. Держишь 0,8 с — грязевая бомба (одна на трассу)
+{
+  const f = $('fire');
+  let hold = 0;
+  f.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (state !== 'go') return;
+    shoot(mine);
+    f.setPointerCapture(e.pointerId);
+    if (!mine.p.bombUsed) { f.classList.add('charging'); clearTimeout(hold); hold = setTimeout(() => { f.classList.remove('charging'); bomb(mine); }, 800); }
+  });
+  for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) f.addEventListener(n, () => { clearTimeout(hold); f.classList.remove('charging'); });
+  f.classList.add('has-bomb');
+}
+let keyHold = 0;
 const input = { x: 0, y: 0, brake: false };
 function readInput() {
   input.x = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -548,7 +629,8 @@ function hostTick() {
   });
   const now = performance.now();
   while (relay.length && now - relay[0].at > 1200) relay.shift();
-  net.send({ t: 'snap', s: { left, pl, fin: finished, sh: relay.map(({ at, ...m }) => m) } });
+  while (relayBombs.length && now - relayBombs[0].at > 3000) relayBombs.shift();
+  net.send({ t: 'snap', s: { left, pl, fin: finished, sh: relay.map(({ at, ...m }) => m), bm: relayBombs.map(({ at, ...m }) => m) } });
   // все на связи долетели — комната закрыта для новых
   if (!hostTick.over && finished.length && room.players.filter((p) => p.online).every((p) => finished.some((f) => f.id === p.id))) {
     hostTick.over = true;
@@ -576,6 +658,10 @@ if (net) {
       if (r && r.net && [a.s, a.x, a.y, a.v].every(Number.isFinite)) Object.assign(r.net, { s: a.s, x: a.x, y: a.y, v: a.v, route: course.routes[a.r] ? a.r : 0 });
     }
     if (a.k === 'fin' && Number.isFinite(a.t)) markFinish(m.from, a.t);
+    if (a.k === 'bomb' && typeof a.id === 'string' && a.id.length < 24 && !riders.get(m.from)?.p.bombUsed) {
+      applyBomb(m.from, a.id);
+      if (isHost) relayBombs.push({ id: a.id, from: m.from, at: performance.now() });
+    }
     if (a.k === 'shot' && typeof a.id === 'string' && a.id.length < 24) {
       remoteShot(a, m.from);
       if (isHost) relay.push({ k: 'shot', id: a.id, s: a.s, x: a.x, y: a.y, v: a.v, r: a.r, from: m.from, at: performance.now() });
@@ -590,11 +676,101 @@ if (net) {
     }
     for (const f of s.fin || []) markFinish(f.id, f.t);
     for (const sh of s.sh || []) if (sh && typeof sh.id === 'string') remoteShot(sh, sh.from);
+    for (const b of s.bm || []) if (b && typeof b.id === 'string' && b.from !== myId) applyBomb(b.from, b.id);
   });
   net.on('closed', (m) => { toast(m.msg, 6000); setTimeout(() => { location.href = 'lobby.html'; }, 2500); });
   net.on('kicked', (m) => toast(m.msg, 6000));
   net.on('down', () => toast('Связь пропала — переподключаемся…', 2000));
   net.on('welcome', () => net.send({ t: 'join', code: ROOM }));
+}
+
+/* ── запись гонки: 10 раз в секунду s, x, y, ветка и скорость каждого (целыми, в десятых) ── */
+const REC_DT = 0.1;
+const recorder = replay ? null : { id: `g${Date.now().toString(36)}`, at: Date.now(), next: 0, frames: {}, shots: [], bombs: [] };
+function recordTick() {
+  if (!recorder || !(state === 'go' || state === 'done') || raceT > 600) return;
+  while (raceT >= recorder.next) {
+    const i = Math.round(recorder.next / REC_DT);
+    for (const r of riders.values()) {
+      const f = (recorder.frames[r.id] ||= { start: i, d: [] }), p = r.p;
+      if (f.start + f.d.length / 5 !== i) continue;            // гонщик пропал и вернулся — дальше не пишем
+      f.d.push(Math.round(p.s * 10), Math.round(p.x * 10), Math.round(p.y * 10), p.route || 0, Math.round(p.v));
+    }
+    recorder.next += REC_DT;
+  }
+}
+function saveReplay() {
+  if (!recorder || raceT < 3) return;
+  const me = finished.find((f) => f.id === myId);
+  replays.save({
+    v: 1, id: recorder.id, at: recorder.at, dt: REC_DT, name: def.name || 'Гонка',
+    src: ROOM ? (room.map === 'track' ? { code: room.lv } : { level: room.level }) : def.custom ? { code: qs.get('code') } : { level: def.id },
+    place: me ? finished.indexOf(me) + 1 : 0, time: me ? +me.t.toFixed(1) : 0,
+    riders: [...riders.values()].filter((r) => recorder.frames[r.id]).map((r) => ({ id: r.id, name: r.isMe ? `${profile.emoji} ${profile.name || 'Ты'}` : r.name, color: r.color, ship: r.ship, me: r.isMe })),
+    frames: recorder.frames, shots: recorder.shots, bombs: recorder.bombs, fin: finished.map((f) => ({ id: f.id, t: +f.t.toFixed(2) })),
+  });
+}
+addEventListener('pagehide', saveReplay);
+
+/* ── повтор: положение по записи с плавной подстановкой между кадрами ── */
+let playT = 0, playSpeed = 1, playPaused = false, playShot = 0, playBomb = 0, playEnd = 0, playDone = false;
+if (replay) {
+  for (const f of Object.values(replay.frames)) playEnd = Math.max(playEnd, (f.start + f.d.length / 5 - 1) * replay.dt);
+  const fmtT = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  $('replay-bar').hidden = false;
+  $('rp-play').onclick = () => { if (playDone) restartReplay(); else playPaused = !playPaused; $('rp-play').textContent = playPaused ? '▶' : '⏸'; };
+  $('rp-speed').onclick = () => { playSpeed = playSpeed === 1 ? 2 : playSpeed === 2 ? 0.5 : 1; $('rp-speed').textContent = `×${playSpeed}`; };
+  $('rp-cam').onclick = () => {
+    const list = [...riders.values()], r = list[(list.indexOf(mine) + 1) % list.length];
+    mine = r; myId = r.id; lookReady = false;
+    toast(`👁 Смотрим за: ${r.name || 'тобой'}`, 1200);
+  };
+  $('rp-time').dataset.end = fmtT(playEnd);
+  replayTick.fmtT = fmtT;
+}
+function restartReplay() {
+  playT = 0; playShot = 0; playBomb = 0; playDone = false; finished.length = 0;
+  for (const sh of shots) sh.dead = 'gone';
+  $('overlay').classList.remove('show');
+  $('rp-play').textContent = '⏸';
+}
+function replayTick(dt) {
+  if (!playPaused && !playDone) playT = Math.min(playEnd, playT + dt * playSpeed);
+  raceT = playT;
+  const k = playT / replay.dt;
+  for (const r of riders.values()) {
+    const f = r.play;
+    if (!f) continue;
+    const n = f.d.length / 5, j = Math.max(0, Math.min(n - 1, k - f.start)), i = Math.min(n - 2, Math.floor(j)), t = Math.max(0, Math.min(1, j - i));
+    const at = (q, c) => f.d[q * 5 + c];
+    const i1 = Math.max(0, i + 1 < n ? i + 1 : i), p = r.p;
+    const route = at(i1, 3);
+    if (at(Math.max(0, i), 3) !== route) { p.route = t < 0.5 ? at(Math.max(0, i), 3) : route; } else p.route = route;
+    const lerp = (c) => (at(Math.max(0, i), c) * (1 - t) + at(i1, c) * t);
+    const ox = p.x, oy = p.y;
+    p.s = lerp(0) / 10; p.x = lerp(1) / 10; p.y = lerp(2) / 10; p.v = lerp(4);
+    p.vx = (p.x - ox) / Math.max(dt, 1e-3); p.vy = (p.y - oy) / Math.max(dt, 1e-3);
+  }
+  while (playShot < replay.shots.length && replay.shots[playShot][0] <= playT) {
+    const [, s, x, y, route, owner, v] = replay.shots[playShot++];
+    const r = riders.get(owner);
+    if (course.routes[route]) spawnShot({ owner, route, s, x, y, v, t: 0, dead: null }, r ? r.color : '#ffffff');
+  }
+  const bl = replay.bombs || [];
+  while (playBomb < bl.length && bl[playBomb][0] <= playT) { applyBomb(bl[playBomb][1], `rp${playBomb}`, true); playBomb++; }
+  if (!playPaused) stepShots(dt * playSpeed);
+  for (const f of replay.fin) if (f.t <= playT) markFinish(f.id, f.t);
+  $('rp-time').textContent = `${replayTick.fmtT(playT)} / ${$('rp-time').dataset.end}`;
+  if (playT >= playEnd && !playDone) {
+    playDone = true;
+    $('rp-play').textContent = '🔁';
+    $('ov-title').textContent = '📼 Конец записи';
+    $('ov-stars').textContent = '';
+    drawTable();
+    $('ov-buttons').innerHTML = `<button class="huge" type="button" id="rp-again">🔁 Сначала</button><a class="huge ghost" href="races.html#replays">📼 Записи</a>`;
+    $('rp-again').onclick = restartReplay;
+    $('overlay').classList.add('show');
+  }
 }
 
 /* ── финиш ── */
@@ -610,6 +786,8 @@ function showFinish() {
     progress.setBest('race', def.id, Math.round(10000 / (finished.find((f) => f.id === myId)?.t || 1e9)));
   }
   audio.sfx(place === 1 ? 'win' : 'clear');
+  saveReplay();
+  setTimeout(saveReplay, 6000);          // ещё немного: в запись попадут и те, кто финиширует следом
   $('ov-title').textContent = place === 1 ? '🏆 Первое место!' : `🏁 Место: ${place}`;
   $('ov-stars').textContent = ROOM || def.custom ? '' : '⭐'.repeat(stars);
   drawTable();
@@ -618,6 +796,8 @@ function showFinish() {
     ? '<a class="huge" href="lobby.html">👫 В лобби</a>'
     : def.custom ? `<a class="huge" href="${esc(location.pathname.split('/').pop() + location.search)}">🔁 Ещё раз</a>${qs.get('edit') ? `<a class="huge rose" href="race-editor.html?edit=${encodeURIComponent(qs.get('edit'))}">🧱 В редактор</a>` : `<a class="huge rose" href="race-editor.html?code=${encodeURIComponent(qs.get('code'))}">🧱 Поменять</a>`}<a class="huge ghost" href="races.html">Трассы</a>`
     : `<a class="huge" href="race.html?level=${def.id}">🔁 Ещё раз</a>${nextOk ? `<a class="huge rose" href="race.html?level=${def.id + 1}">🚀 Следующая</a>` : ''}<a class="huge ghost" href="map.html?map=race">Трассы</a>`;
+  if (recorder) $('ov-buttons').insertAdjacentHTML('beforeend', `<a class="huge ghost" href="race.html?replay=${recorder.id}${qs.has('debug') ? '&debug' : ''}" id="btn-replay">📼 Повтор</a>`);
+  $('btn-replay')?.addEventListener('click', saveReplay);
   $('overlay').classList.add('show');
 }
 function drawTable() {
@@ -662,6 +842,9 @@ function step(dt) {
       botInput(r.p, course, raceT, r.skill, r.inp ||= { x: 0, y: 0, brake: false });
       const ev = stepRacer(r.p, r.inp, course, raceT, h, r.skill.vmaxK);
       if (ev.some(([e]) => e === 'fin')) markFinish(r.id, r.p.fin);
+      // бот бросает свою бомбу один раз, когда отстаёт от лидера
+      r.bombAt ??= 12 + Math.random() * 30;
+      if (!r.p.bombUsed && raceT > r.bombAt && [...riders.values()].some((q) => q !== r && q.p.s > r.p.s + 40)) bomb(r);
       // бот стреляет реже игрока и не всегда: ловкий чаще
       r.aimT = (r.aimT ?? 1.5 - r.id * 0.4) - h;
       if (r.aimT <= 0 && botAims(r.p, [...riders.values()].map((q) => q.p))) {
@@ -683,12 +866,14 @@ function tick() {
     if (label !== wasCount) { wasCount = label; $('count').textContent = label; $('count').hidden = false; audio.sfx(left > 0 ? 'jump' : 'wave'); }
     if (left <= 0) { state = 'go'; raceT = 0; setTimeout(() => { $('count').hidden = true; }, 700); }
   }
-  if (state === 'go' || state === 'done') step(dt);
-  if (state === 'wait' && !ROOM) startCount(3200);
+  if (replay) replayTick(dt);
+  else if (state === 'go' || state === 'done') step(dt);
+  if (state === 'wait' && !ROOM && !replay) startCount(3200);
+  recordTick();
 
   // чужие догоняют снимок и продолжают лететь по скорости, пока нет нового
   for (const r of riders.values()) {
-    if (!r.net) continue;
+    if (!r.net || replay) continue;
     const q = r.net, p = r.p, f = Math.min(1, dt * 7);
     const vx = (q.x - p.x) * f / Math.max(dt, 1e-3), vy = (q.y - p.y) * f / Math.max(dt, 1e-3);
     p.s += (q.s - p.s) * f; p.x += (q.x - p.x) * f; p.y += (q.y - p.y) * f;
@@ -732,7 +917,7 @@ function tick() {
   $('speed-num').textContent = Math.round(sp.v * 10);
   $('speed-fill').style.width = `${Math.min(100, (sp.v / def.vmax) * 100)}%`;
   $('drift-chip').hidden = !(sp.slip > 0.42 && state === 'go');
-  $('clock').textContent = state === 'go' || state === 'done' ? fmt(mine.p.fin || raceT) : '0:00';
+  $('clock').textContent = replay ? fmt(playT) : state === 'go' || state === 'done' ? fmt(mine.p.fin || raceT) : '0:00';
   const order = [...riders.values()].sort((a, b) => {
     const fa = finished.findIndex((x) => x.id === a.id), fb = finished.findIndex((x) => x.id === b.id);
     if (fa >= 0 && fb >= 0) return fa - fb;
@@ -775,10 +960,18 @@ function tick() {
   renderer.render(scene, camera);
 }
 
-state = 'wait';
+state = replay ? 'go' : 'wait';
 if (ROOM) $('wait-host').classList.add('show');
 $('loading').classList.add('done');
 $('place-of').textContent = riders.size;
 tick();
-toast(matchMedia('(pointer: coarse)').matches ? 'Лети пальцем слева, справа — тормоз, 🔫 — стрелять: попадание замедляет!' : 'WASD или стрелки — лететь, пробел — тормоз, F — стрелять: попадание замедляет!', 3500);
-if (qs.has('debug')) window.__race = { riders, get mine() { return mine; }, get state() { return state; }, get track() { return routeOf(course, mine.p); }, course, finished, joy, camera, get raceT() { return raceT; }, get isHost() { return isHost; }, shots, shoot };
+if (replay) toast(`📼 Повтор: ${replay.name}`, 2500);
+else {
+  toast(matchMedia('(pointer: coarse)').matches ? 'Лети пальцем слева, справа — тормоз, 🔫 — стрелять: попадание замедляет!' : 'WASD или стрелки — лететь, пробел — тормоз, F — стрелять: попадание замедляет!', 3500);
+  if (!localStorage.getItem('tg.tip.bomb')) {          // разовое предупреждение о новой бомбе
+    localStorage.setItem('tg.tip.bomb', '1');
+    setTimeout(() => toast(`Новое: 💣 держи «Огонь»${matchMedia('(pointer: coarse)').matches ? '' : ' (или B)'} — грязевая бомба замедлит всех! Одна на трассу.`, 4500), 3600);
+  }
+}
+if (qs.has('debug')) window.__race = { riders, get mine() { return mine; }, get state() { return state; }, get track() { return routeOf(course, mine.p); }, course, finished, joy, camera, get raceT() { return raceT; }, get isHost() { return isHost; }, shots, shoot, bomb,
+  saveReplay, get recorder() { return recorder; }, get playT() { return playT; }, replay };

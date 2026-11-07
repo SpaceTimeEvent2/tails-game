@@ -29,6 +29,7 @@
     <button type="button" data-tab="all">🌍 Все игроки</button>
     <button type="button" data-tab="mine">🛠 Мои</button>
     <button type="button" data-tab="samples">⭐ Примеры</button>
+    <button type="button" data-tab="replays">📼 Записи</button>
   </div>
   <div class="levels scroll" id="levels"></div>
 </main>
@@ -36,6 +37,7 @@
 import { EXAMPLES, analyze, decode, encode, trackName, xyzOf, myRaces, DIFFS, T } from './src/race-design.js';
 import { authorId } from './src/custom.js';
 import { apiBase } from './src/net.js';
+import { replays } from './src/replays.js';
 
 const grid = document.getElementById('levels');
 const debug = new URLSearchParams(location.search).has('debug') ? '&debug' : '';
@@ -95,14 +97,26 @@ async function showAll() {
   }).join('');
   grid.innerHTML = html || '<div class="empty">Пока никто не поделился трассой. Построй свою и нажми «🌍 Всем»!</div>';
 }
+function showReplays() {
+  const list = replays.list();
+  const when = (t) => new Date(t).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  grid.innerHTML = list.length ? list.map((x) => `<div class="lvl mine-lvl" style="--img:none">
+    <a class="fill" href="race.html?replay=${encodeURIComponent(x.id)}${debug}" aria-label="Смотреть запись"></a>
+    <span class="name">📼 ${x.name.replace(/[<>&]/g, '')}</span>
+    <button class="edit" type="button" data-delrec="${x.id}" title="Удалить запись">🗑</button>
+    <span class="meta">▶ ${x.place ? `${x.place} место · ${x.time} с` : 'не долетел'} · ${when(x.at)}</span></div>`).join('')
+    : '<div class="empty">Записей пока нет. После каждой гонки запись сохраняется сама — тут будут последние десять.</div>';
+}
 let tab = 'all';
 function show(t) {
   tab = t;
   document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
-  ({ all: showAll, mine: showMine, samples: showSamples })[t]();
+  ({ all: showAll, mine: showMine, samples: showSamples, replays: showReplays })[t]();
 }
 document.getElementById('tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); });
 grid.addEventListener('click', async (e) => {
+  const dr = e.target.closest('[data-delrec]');
+  if (dr && confirm('Удалить эту запись?')) { replays.remove(dr.dataset.delrec); showReplays(); }
   const del = e.target.closest('[data-del]');
   if (del && confirm('Удалить эту трассу с телефона?')) { myRaces.remove(del.dataset.del); showMine(); }
   const rep = e.target.closest('[data-report]');
@@ -113,7 +127,7 @@ grid.addEventListener('click', async (e) => {
     fetch(`${apiBase()}api/tracks/report`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ id, device: authorId() }) }).catch(() => {});
   }
 });
-show('all');
+show(location.hash === '#replays' ? 'replays' : 'all');
 </script>
 </body>
 </html>

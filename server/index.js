@@ -257,7 +257,7 @@ wss.on('connection', (ws, req) => {
       me.name = clean(m.name, 14) || 'Игрок';
       me.color = COLOR.test(m.color) ? m.color : '#ffd447';
       me.emoji = clean(m.emoji, 4) || '🦊';
-      me.hero = ['dancer', 'maskot', 'ghost'].includes(m.hero) ? m.hero : 'dancer';
+      me.hero = ['maskot', 'ghost'].includes(m.hero) ? m.hero : 'maskot';   // старые версии могли прислать dancer
       me.tint = COLOR.test(m.tint) ? m.tint : '';
       me.ship = ['wedge', 'arrow', 'delta'].includes(m.ship) ? m.ship : 'wedge';
       clearTimeout(me.timer);

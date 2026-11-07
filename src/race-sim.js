@@ -172,7 +172,7 @@ export function newRacer(lane = 0) {
 export function stepRacer(p, input, course, t, dt, vmaxK = 1) {
   const ev = [];
   let track = routeOf(course, p);
-  const vmax = track.def.vmax * vmaxK;
+  const vmax = track.def.vmax * vmaxK * ((p.mud || 0) > 0 ? BOMB.cap : 1);
   // плавный разгон: чем ближе к максимуму, тем медленнее; после ускорителя лишнее так же плавно гаснет
   if (input.brake) p.v = Math.max(track.def.vmax * 0.18, p.v - BRAKE * dt);
   else p.v += (vmax - p.v) * ACCEL * dt + (p.v < vmax * 0.12 ? 6 * dt : 0);
@@ -192,6 +192,7 @@ export function stepRacer(p, input, course, t, dt, vmaxK = 1) {
   p.scrape = Math.max(0, p.scrape - dt);
   p.gun = Math.max(0, (p.gun || 0) - dt);
   p.zap = Math.max(0, (p.zap || 0) - dt);
+  p.mud = Math.max(0, (p.mud || 0) - dt);
   // стенка: скользим вдоль неё и теряем скорость
   const lim = TUBE_R - BODY_R, r = Math.hypot(p.x, p.y);
   if (r > lim) {
@@ -288,6 +289,10 @@ export function shotHits(sh, p, course) {
 
 /** Попадание: скорость падает, а удар не повторяется сразу. */
 export function zap(p) { p.v *= SHOT.slow; p.zap = 0.8; }
+
+/* ── грязевая бомба: одна на трассу; всех остальных тормозит и 2,5 с не пускает выше половины скорости ── */
+export const BOMB = { mud: 2.5, slow: 0.6, cap: 0.5 };
+export function mudBomb(p) { p.v *= BOMB.slow; p.mud = BOMB.mud; }
 
 /** Бот стреляет, если кто-то впереди почти на одной линии. */
 export function botAims(p, others) {

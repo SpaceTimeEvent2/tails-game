@@ -72,8 +72,8 @@ const AIR_WISH = 4, AIR_ACCEL = 90;
 
 const SRCS = {};                // hero → { gltf, scale }
 
-export async function loadRunnerModel(loader, hero = 'dancer') {
-  const kind = HEROES[hero] ? hero : 'dancer';
+export async function loadRunnerModel(loader, hero = 'maskot') {
+  const kind = HEROES[hero] && hero !== 'dancer' ? hero : 'maskot';
   if (!HEROES[kind].url) return null;
   if (SRCS[kind]) return SRCS[kind];
   const gltf = await loader.loadAsync(HEROES[kind].url);
@@ -114,7 +114,8 @@ const ONE_SHOT = { jump: ['Jump', '360_Power_Spin_Jump', 'Skip_Forward'], build:
                    cheer: ['Cheer', 'Dance', 'All_Night_Dance'], sad: ['Kneel_Idle', 'Kneeling_Reload'] };
 
 export class Runner {
-  constructor(scene, { color = '#ffd447', name = '', me = false, hero = 'dancer', tint = '' } = {}) {
+  constructor(scene, { color = '#ffd447', name = '', me = false, hero = 'maskot', tint = '' } = {}) {
+    if (hero === 'dancer') hero = 'maskot';     // персонаж игрока: Танцовщицы больше нет
     this.scene = scene;
     this.root = new THREE.Group();
     this.body = new THREE.Group();       // для подпрыгивания без клипа
@@ -122,7 +123,7 @@ export class Runner {
     this.ghost = hero === 'ghost';
     this.stage = 1;
     this.scaleNow = 1;
-    const SRC = SRCS[hero] || SRCS.dancer || Object.values(SRCS)[0];
+    const SRC = SRCS[hero] || SRCS.maskot || Object.values(SRCS)[0];
     if (this.ghost) {
       this.model = this.makeGhost(tint);
     } else {
