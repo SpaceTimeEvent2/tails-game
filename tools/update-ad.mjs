@@ -72,7 +72,12 @@ let total = 0, scene = null;              // scene — где идёт врем�
 const sfxLog = [], musicAt = [], voices = [];
 const now = () => total / FPS;
 const cap = (t) => page.evaluate((t) => { const e = document.getElementById('__cap'); e.innerHTML = t; e.classList.remove('pop'); void e.offsetWidth; e.classList.add('pop'); }, t);
-const voice = (k) => voices.push([k, now()]);
+const VOICE_DIR = process.env.VOICE_DIR || 'store/video/update';
+const voiceLen = (k) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', `${VOICE_DIR}/${k}.mp3`]).toString());
+let voiceEnd = 0;
+const voice = (k) => { voices.push([k, now()]); voiceEnd = now() + voiceLen(k) + 0.25; };
+/** Последний кусок сцены: не короче, чем звучит её фраза — следующая не наедет. */
+const tail = (beats, each, slow = 1) => rec(Math.max(beats, (voiceEnd - now()) / BEAT), each, slow);
 const music = (lv) => musicAt.push([now(), lv]);
 
 /** beats долей; перед каждым кадром each(доля 0..1); slow < 1 — замедление. */
@@ -174,18 +179,19 @@ await openRace('race.html?level=2&debug');
 await page.evaluate(() => { const g = __first('gate', 600); __tp(g.s - 170, 80, g.x * 0.5, g.y * 0.5); __bots([12, 22, 32], 0.97); });
 music(1);
 await cap('БОЛЬШОЕ<br><b>ОБНОВЛЕНИЕ!</b>'); voice('u1');
-await rec(6);
+await tail(6);
 
 /* 2. Вид снаружи: у каждого свой корабль */
 await page.evaluate(() => { const s = __first('rocks', 1100).s + 40; __tp(s, 70); __bots([-6, 6, 10], 1, [7, -7, 0], [0, 1, -6]); __orbit(26, 0.4, 3); });
 await cap('СВОЙ<br><b>КОРАБЛЬ!</b>'); voice('u2');
-await rec(7, (t) => page.evaluate((t) => __orbit(26 + t * 6, 0.4 + t * 1.9, 3), t));
+await tail(7, (t) => page.evaluate((t) => __orbit(26 + t * 6, 0.4 + t * 1.9, 3), t));
 
 /* 3. Профиль: выбираем форму */
 await openFramed('profile.html');
 await cap('КЛИН, СТРЕЛА<br><b>ИЛИ ДЕЛЬТА</b>'); voice('u3');
 await rec(2);
 for (const i of [1, 2, 0]) { await tapIn(`#ships button:nth-child(${i + 1})`); await rec(2.2); }
+await tail(0);
 
 /* 4. Стрельба: соперник впереди на линии, заряды догоняют и тормозят его */
 await openRace('race.html?level=1&debug');
@@ -198,7 +204,7 @@ await page.evaluate(() => {
 });
 await cap('<b>СТРЕЛЯЙ!</b>'); voice('u4');
 let shotT = 0;
-await rec(9, async (t) => {
+await tail(9, async (t) => {
   await page.evaluate((fire) => { __keepAim(); if (fire) { __race.mine.p.gun = 0; __race.shoot(__race.mine); } }, (shotT++ % 14) === 3);
 }, 0.6);
 
@@ -209,7 +215,7 @@ await openFramed(`race-editor.html?debug&code=${encodeURIComponent(encode({ ...e
 await scene.evaluate(() => { __ed.camera.position.set(14 * 28, 9 * 28, -7 * 28); __ed.look(Math.PI, -0.72); });
 await cap('СТРОЙ ТРАССЫ<br><b>ИЗ БЛОКОВ!</b>'); voice('u5');
 let put = 6;
-await rec(8, async (t) => {
+await tail(8, async (t) => {
   if (put < chain.length && Math.random() < 2) {
     const k = chain[put++];
     await scene.evaluate(([k, ty]) => __ed.put(k, ty), [k, ex.blocks.get(k)]);
@@ -232,7 +238,7 @@ await page.evaluate(() => {
 });
 await rec(5);
 await page.evaluate(() => { __mode = 'pilot'; });
-await rec(2);
+await tail(2);
 
 /* 7. «Достроить»: нажал — дорога дошла до финиша */
 const stub = new Map([[keyOf(14, 0, 6), T.start], [keyOf(15, 0, 6), T.path], [keyOf(16, 0, 6), T.path], [keyOf(17, 0, 6), T.path]]);
@@ -241,14 +247,14 @@ await scene.evaluate(() => { __ed.camera.position.set(16 * 28, 9 * 28, -2 * 28);
 await cap('НЕ ДОСТРОИЛ?<br><b>ИГРА ПОМОЖЕТ!</b>'); voice('u7');
 await rec(3);
 await tapIn('#btn-fix');
-await rec(5);
+await tail(5);
 
 /* 8. С друзьями: четверо рядом, вид сбоку, и финишная вспышка */
 await openRace(`race.html?debug&code=${encodeURIComponent(encode(EXAMPLES[2]))}`);
 await page.evaluate(() => { let s = 400; while (!__clear(s - 30, 120) && s < 2000) s += 20; __tp(s, 75); __bots([-4, 5, 9], 1, [6, -6, 0], [1, 0, -6]); __orbit(24, 0.8, 2); });
 await cap('ВМЕСТЕ<br><b>С ДРУЗЬЯМИ!</b>'); voice('u8');
 music(2);
-await rec(7, (t) => page.evaluate((t) => __orbit(24 + t * 8, 0.8 + t * 1.6, 2), t));
+await tail(7, (t) => page.evaluate((t) => __orbit(24 + t * 8, 0.8 + t * 1.6, 2), t));
 await cap('');
 await page.evaluate(() => { const f = document.getElementById('__flash'); f.style.transition = 'none'; f.style.opacity = 0.9; void f.offsetWidth; f.style.transition = ''; f.style.opacity = 0; });
 await rec(1);
@@ -282,7 +288,7 @@ const raw = await page.evaluate(async (dur, sfxLog, musicAt) => {
 await br.close();
 const bedF = path.join(os.tmpdir(), `tails-update-bed-${process.pid}.raw`);
 fs.writeFileSync(bedF, Buffer.from(raw, 'base64'));
-const inputs = voices.flatMap(([k]) => ['-i', `store/video/update/${k}.mp3`]);
+const inputs = voices.flatMap(([k]) => ['-i', `${VOICE_DIR}/${k}.mp3`]);
 const delays = voices.map(([, at], i) => `[${i + 2}:a]adelay=${Math.round(at * 1000)}:all=1,volume=1.5[v${i}]`).join(';');
 const fc = `${delays};${voices.map((_, i) => `[v${i}]`).join('')}amix=inputs=${voices.length}:normalize=0:dropout_transition=0,apad=whole_dur=${dur.toFixed(2)},asplit[vo][key];`
   + `[1:a][key]sidechaincompress=threshold=0.04:ratio=5:attack=20:release=300[bed];[bed][vo]amix=inputs=2:normalize=0:dropout_transition=0,loudnorm=I=-14:TP=-1:LRA=11,afade=t=out:st=${(dur - 0.6).toFixed(2)}:d=0.6,apad[a]`;

@@ -219,6 +219,46 @@ export function autoComplete(design) {
   return ops;
 }
 
+/**
+ * «Достроить с развилкой»: от конца дороги — развилка, прямая ветка с ускорителем и петля сбоку с воротами,
+ * ветки сходятся во второй развилке, дальше несколько блоков и финиш. Только если финиша ещё нет. Иначе null.
+ */
+export function autoFork(design) {
+  const b = design.blocks;
+  const starts = [...b].filter(([, t]) => t === T.start).map(([k]) => k);
+  if (starts.length !== 1 || [...b.values()].includes(T.finish)) return null;
+  const S = starts[0], near = (k) => DIRS.map((_, i) => step(k, i)).filter((n) => n >= 0);
+  const dist = new Map([[S, 0]]), from = new Map(), q = [S];
+  while (q.length) { const k = q.shift(); for (const n of near(k)) if (b.has(n) && !dist.has(n)) { dist.set(n, dist.get(k) + 1); from.set(n, k); q.push(n); } }
+  let tip = S;
+  for (const [k, d] of dist) if (d > dist.get(tip)) tip = k;
+  const [tx, ty, tz] = xyzOf(tip), base = from.has(tip) ? xyzOf(from.get(tip)) : [tx, ty, tz - 1];
+  const d0 = [tx - base[0], 0, tz - base[2]];
+  if (!d0[0] && !d0[2]) d0[2] = 1;
+  const L = 6;
+  const turns = [d0, [d0[2], 0, -d0[0]], [-d0[2], 0, d0[0]], [-d0[0], 0, -d0[2]]];
+  for (const d of turns) for (const sd of [[d[2], 0, -d[0]], [-d[2], 0, d[0]]]) {
+    const at = (base0, k, s) => [base0[0] + d[0] * k + sd[0] * s, ty, base0[2] + d[2] * k + sd[2] * s];
+    const F = [tx + d[0], ty, tz + d[2]];
+    const cells = [[F, T.fork]];
+    for (let k = 1; k < L; k++) cells.push([at(F, k, 0), k === 3 ? T.boost : T.path]);              // прямо
+    for (let s = 1; s <= 3; s++) cells.push([at(F, 0, s), T.path]);                                 // петля сбоку
+    for (let k = 1; k <= L; k++) cells.push([at(F, k, 3), k === 3 ? T.gate : T.path]);
+    for (let s = 2; s >= 1; s--) cells.push([at(F, L, s), T.path]);
+    cells.push([at(F, L, 0), T.fork]);
+    for (let k = L + 1; k <= L + 4; k++) cells.push([at(F, k, 0), k === L + 4 ? T.finish : T.path]);
+    if (!cells.every(([c]) => inField(...c))) continue;
+    const keys = new Set(cells.map(([c]) => keyOf(...c)));
+    // клетки свободны и не касаются чужих блоков (кроме конца дороги у первой развилки)
+    if ([...keys].some((k) => b.has(k) || near(k).some((n) => b.has(n) && !keys.has(n) && !(n === tip && k === keyOf(...F))))) continue;
+    const ops = cells.map(([c, t]) => [keyOf(...c), t]);
+    const test = new Map(b); for (const [k, t] of ops) test.set(k, t);
+    const a = analyze({ ...design, blocks: test });
+    if (a.ok && a.routes.length >= 2) return ops;
+  }
+  return null;
+}
+
 /* ── трасса для гонки ── */
 
 /** Ось по блокам: сглаженная кубическим B-сплайном, поэтому лесенка становится подъёмом, а угол — виражом. */

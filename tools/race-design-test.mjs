@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Трассы из блоков без графики: код, развилки и слияния, змейка, примеры, боты не пролетают сквозь преграды. node tools/race-design-test.mjs */
-import { EXAMPLES, analyze, autoComplete, buildCourse, decode, encode, keyOf, trackName, T, DIFFS, CELL } from '../src/race-design.js';
+import { EXAMPLES, analyze, autoComplete, autoFork, buildCourse, decode, encode, keyOf, trackName, T, DIFFS, CELL } from '../src/race-design.js';
 import { newRacer, stepRacer, botInput, hits, routeOf, fire, stepShot, shotHits, zap, botAims, mudBomb, TUBE_R, BODY_R } from '../src/race-sim.js';
 
 let fails = 0;
@@ -115,6 +115,18 @@ for (const d of EXAMPLES) {
   let e = line(b3, [12, 0, 6], [1, 0, 0], 4); b3.set(keyOf(...e), T.finish);
   const [o3, a3] = fill(b3);
   check(o3 && a3.ok, `разрыв соединён: ${o3?.length} блоков, путь ${a3?.routes[0]?.chain.length}`);
+  // с развилкой: два пути, трасса готова, боты долетают
+  {
+    const b5 = new Map(); b5.set(keyOf(8, 0, 4), T.start); line(b5, [8, 0, 4], [0, 0, 1], 3);
+    const ops = autoFork({ blocks: b5 }), c = new Map(b5); for (const [k, t] of ops || []) c.set(k, t);
+    const a5 = analyze({ blocks: c });
+    check(ops && a5.ok && a5.routes.length === 2 && a5.used.size === c.size, `«Достроить с развилкой»: ${ops?.length} блоков, путей ${a5.routes.length}`);
+    const course = buildCourse({ a: 0, b: 0, d: 'easy', blocks: c });
+    const p = newRacer(0), inp = { x: 0, y: 0, brake: false };
+    for (let t = 0; t < 120 && !p.fin; t += DT) { botInput(p, course, t, { miss: 0, vmaxK: 1, sloppy: 1, seed: 1 }, inp); stepRacer(p, inp, course, t, DT); }
+    check(p.fin > 0, `по достроенной с развилкой трассе бот долетает (${p.fin.toFixed(1)} с)`);
+    check(autoFork(EXAMPLES[0]) === null, 'если финиш уже есть — кнопки «с развилкой» нет');
+  }
   // готовая трасса — кнопки нет
   check(autoComplete(EXAMPLES[0]) === null, 'у готовой трассы «Достроить» нет');
 }

@@ -8,7 +8,7 @@ import { Joystick } from './runner.js';
 import { instantPress } from './touch-camera.js';
 import { apiBase } from './net.js';
 import { points, TASKS, MINUTES_PER_DAY } from './points.js';
-import { W, H, CELL, MAX_BLOCKS, BLOCKS, T, DIFFS, keyOf, xyzOf, inField, newDesign, encode, decode, analyze, autoComplete, trackName, myRaces } from './race-design.js';
+import { W, H, CELL, MAX_BLOCKS, BLOCKS, T, DIFFS, keyOf, xyzOf, inField, newDesign, encode, decode, analyze, autoComplete, autoFork, trackName, myRaces } from './race-design.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -208,12 +208,14 @@ function refresh(changed = true) {
   if (analysis.ok) st.textContent = `✅ Готова: ${analysis.length} м${analysis.routes.length > 1 ? `, путей ${analysis.routes.length}` : ''}`;
   else st.textContent = analysis.errors[0];
   fixOps = analysis.ok ? null : autoComplete(design);
+  forkOps = analysis.ok ? null : autoFork(design);
   $('btn-fix').hidden = !fixOps;
+  $('btn-fixfork').hidden = !forkOps;
   $('btn-name').textContent = trackName(design);
   $('btn-diff').textContent = DIFFS[design.d].name;
   if (changed) { published = false; builtThisMinute = true; if (saveTimer === null) saveTimer = setTimeout(save, 300); questCheck(); }
 }
-let saveTimer = null, published = false, fixOps = null;
+let saveTimer = null, published = false, fixOps = null, forkOps = null;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
@@ -270,15 +272,17 @@ $('btn-save').onclick = () => {
   save();
   toast('💾 Сохранено в «Мои трассы»');
 };
-$('btn-fix').onclick = () => {
-  if (!fixOps) return;
-  if (blocks.size + fixOps.length > MAX_BLOCKS) { toast(`Больше ${MAX_BLOCKS} блоков нельзя`); return; }
+function build(list, what) {
+  if (!list) return;
+  if (blocks.size + list.length > MAX_BLOCKS) { toast(`Больше ${MAX_BLOCKS} блоков нельзя`); return; }
   const ops = [];
-  for (const [k, t] of fixOps) setBlock(k, t, ops);
+  for (const [k, t] of list) setBlock(k, t, ops);
   undoStack.push(ops);
   refresh();
-  toast(`🪄 Достроил ${ops.length} ${ops.length < 5 ? 'блока' : 'блоков'}. Не нравится — нажми ↩️`, 2600);
-};
+  toast(`${what} ${ops.length} ${ops.length < 5 ? 'блока' : 'блоков'}. Не нравится — нажми ↩️`, 2600);
+}
+$('btn-fix').onclick = () => build(fixOps, '🪄 Достроил');
+$('btn-fixfork').onclick = () => build(forkOps, '🔀 Достроил с развилкой:');
 $('btn-name').onclick = () => { design.a = Math.floor(Math.random() * 16); design.b = Math.floor(Math.random() * 16); refresh(); };
 $('btn-diff').onclick = () => { const ids = Object.keys(DIFFS); design.d = ids[(ids.indexOf(design.d) + 1) % ids.length]; refresh(); };
 $('btn-fly').onclick = () => {

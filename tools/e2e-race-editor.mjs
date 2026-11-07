@@ -77,6 +77,13 @@ async function phone(name, width = 800, height = 360) {
   await page.screenshot({ path: path.join(SHOTS, 'editor-fixed.png') });
   await ed(() => __ed.undo());
   check(await ed(() => __ed.blocks.size) === n0, 'шаг назад отменяет достройку целиком');
+  // «Достроить с развилкой»: два пути до финиша
+  const forkShown = await ed(() => !document.getElementById('btn-fixfork').hidden);
+  await page.$eval('#btn-fixfork', (b) => b.click());
+  const fk = await ed(() => [__ed.analysis.ok, __ed.analysis.routes.length]);
+  check(forkShown && fk[0] && fk[1] === 2, `«Достроить с развилкой» строит трассу с двумя путями (${fk})`);
+  await page.screenshot({ path: path.join(SHOTS, 'editor-fixfork.png') });
+  await ed(() => __ed.undo());
   // сохранить кнопкой
   await ed(() => localStorage.removeItem('tg.my.races'));
   await page.$eval('#btn-save', (b) => b.click());
