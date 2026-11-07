@@ -3,6 +3,8 @@
  * Токен игрока живёт в sessionStorage — при переходе «лобби → игра» и при обрыве связи
  * сервер узнаёт того же игрока и возвращает его место в комнате.
  */
+import { parseKit, kitString } from './shop.js';
+
 export const COLORS = ['#ffd447', '#ff6f91', '#8fd0ff', '#9be37a', '#c7b0ff', '#ffa45c'];
 export const EMOJIS = ['🦊', '🐱', '🐬', '🐢', '🦄', '🐝', '🐙', '🐸', '🐼', '🦁', '🐵', '🐧', '🦉', '🦖', '🐰', '🐯'];
 export const HERO_IDS = ['maskot', 'ghost'];          // Танцовщицу (Tiny Dancer) игроку больше не предлагаем
@@ -19,6 +21,7 @@ export function me() {
     hero: HERO_IDS.includes(m.hero) ? m.hero : HERO_IDS[0],
     tint: TINTS.includes(m.tint) ? m.tint : '',
     ship: SHIP_IDS.includes(m.ship) ? m.ship : SHIP_IDS[0],
+    kit: parseKit(kitString(m.kit || {})),     // надетые ачивки корабля (src/shop.js)
   };
 }
 export function saveMe(m) { try { localStorage.setItem('tg.me', JSON.stringify(m)); } catch (e) { /* */ } }
@@ -56,7 +59,8 @@ export class Net {
     ws.onopen = () => {
       this.open = true;
       this.retry = 0;
-      ws.send(JSON.stringify({ t: 'hello', token: getToken(), ...this.profile }));
+      const k = this.profile.kit;
+      ws.send(JSON.stringify({ t: 'hello', token: getToken(), ...this.profile, kit: typeof k === 'string' ? k : kitString(k || {}) }));
     };
     ws.onmessage = (ev) => {
       let m;

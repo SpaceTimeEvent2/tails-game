@@ -3,6 +3,7 @@
  * Общие для гонки (race.js) и профиля (profile.js), где корабль выбирают.
  */
 import * as THREE from 'three';
+import { itemById } from './shop.js';
 
 export const SHIP_IDS = ['wedge', 'arrow', 'delta'];
 export const SHIPS = {
@@ -53,16 +54,59 @@ function geometry(id) {
 const METAL = new THREE.MeshStandardMaterial({ color: 0xc9d0dc, roughness: 0.55, metalness: 0.35, flatShading: true, side: THREE.DoubleSide });
 const GLASS = new THREE.MeshBasicMaterial({ color: 0x9fe8ff });
 
-/** Корабль в цвете игрока; engines — где у него сопла (x, y, радиус), сопла на z = −2. */
-export function makeShip(id, color, outline = 0xffffff) {
+/* ── ачивки (src/shop.js): крылья и эмблема на рубке ── */
+const WING = {
+  'wings-twin': () => { const g = []; for (const s of [1, -1]) for (const [y, z] of [[0.1, -0.6], [0.45, -1.4]]) g.push(facets([[[s * 0.8, y, z + 0.7], [s * 3.1, y, z - 0.5], [s * 0.9, y, z - 0.6]]])); return g; },
+  'wings-fins': () => [1, -1].map((s) => facets([[[s * 0.5, 0.2, -0.4], [s * 0.7, 1.7, -2.2], [s * 0.6, 0.2, -2]]])),
+};
+const glyphTex = new Map();
+function emblem(glyph) {
+  if (!glyphTex.has(glyph)) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d'); x.font = '100px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(glyph, 64, 70);
+    glyphTex.set(glyph, new THREE.CanvasTexture(c));
+  }
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: glyphTex.get(glyph), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(0, 0.62, 0.7);
+  return m;
+}
+
+/** Корабль в цвете игрока; engines — где у него сопла (x, y, радиус), сопла на z = −2. kit — надетые ачивки. */
+export function makeShip(id, color, outline = 0xffffff, kit = {}) {
   const g = geometry(SHIP_IDS.includes(id) ? id : 'wedge');
   const ship = new THREE.Group();
+  const paintIt = itemById(kit.paint), hull = paintIt ? new THREE.MeshStandardMaterial({ color: new THREE.Color(paintIt.color), roughness: paintIt.metal ? 0.25 : 0.55,
+    metalness: paintIt.metal ? 0.9 : 0.3, flatShading: true, side: THREE.DoubleSide, emissive: new THREE.Color(paintIt.glow ? paintIt.color : 0), emissiveIntensity: paintIt.glow ? 0.45 : 0 }) : METAL;
   const paint = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.6, flatShading: true, side: THREE.DoubleSide, emissive: new THREE.Color(color), emissiveIntensity: 0.25 });
-  ship.add(new THREE.Mesh(g.hull, METAL));
+  ship.add(new THREE.Mesh(g.hull, hull));
   for (const p of g.paint) ship.add(new THREE.Mesh(p, paint));
-  for (const p of g.metal) ship.add(new THREE.Mesh(p, METAL));
+  for (const p of g.metal) ship.add(new THREE.Mesh(p, hull));
   for (const p of g.glass) ship.add(new THREE.Mesh(p, GLASS));
+  if (WING[kit.wings]) for (const w of WING[kit.wings]()) ship.add(new THREE.Mesh(w, paint));
+  const em = itemById(kit.emblem);
+  if (em) ship.add(emblem(em.glyph));
   ship.add(new THREE.LineSegments(g.edges, new THREE.LineBasicMaterial({ color: new THREE.Color(outline), transparent: true, opacity: 0.8 })));
   ship.userData.engines = g.engines;
   return ship;
+}
+
+const flameGeo = new THREE.ConeGeometry(0.34, 1, 10);
+flameGeo.translate(0, 0.5, 0);
+flameGeo.rotateX(-Math.PI / 2);         // основание у сопла, острие назад, по −Z
+/** Реактивные струи из сопел корабля: цвет игрока или купленный след; радужный переливается. set(k) — длина 0..3. */
+export function addFlames(ship, color, kit = {}) {
+  const tr = itemById(kit.trail);
+  const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(tr && tr.color ? tr.color : color), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+  const group = new THREE.Group();
+  for (const [x, y, k] of ship.userData.engines) {
+    const f = new THREE.Mesh(flameGeo, mat);
+    f.position.set(x, y, 0);
+    f.scale.set(k / 0.34, k / 0.34, 1);
+    group.add(f);
+  }
+  group.position.z = -2.1;
+  ship.add(group);
+  const rainbow = tr && tr.id === 'trail-rainbow';
+  return { group, set(len) { group.scale.set(1, 1, len); if (rainbow) mat.color.setHSL((performance.now() / 1500) % 1, 1, 0.6); } };
 }

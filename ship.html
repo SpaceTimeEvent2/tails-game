@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хвосты — мастерская корабля</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="menu.css">
+<style>
+  .shop { overflow-y: auto; justify-content: flex-start; scrollbar-width: thin; }
+  .shop h3 { margin: 4px 0 2px; font-size: clamp(12px, 2.4vh, 15px); color: #b8d2e0; font-weight: 700; }
+  .items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .items button { position: relative; min-width: 64px; min-height: 52px; padding: 4px 8px; border-radius: 12px; border: 2px solid #ffffff26; background: #ffffff10; color: #fff; font: 700 12px var(--font); cursor: pointer; display: grid; place-items: center; gap: 1px; }
+  .items button b { font-size: 20px; line-height: 1; }
+  .items button.on { border-color: var(--mimosa); background: #ffd44733; }
+  .items button.locked { opacity: .8; }
+  .items button .price { color: var(--mimosa); }
+  .items button.cant .price { color: #ff9a8a; }
+  .wallet { display: flex; align-items: center; gap: 10px; font-weight: 800; }
+  .wallet .bal { padding: 6px 14px; border-radius: 999px; background: #ffd44726; border: 2px solid var(--mimosa); font-size: 18px; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="waves"></div>
+<main id="pick">
+  <header class="top">
+    <a class="back" href="profile.html">← Профиль</a>
+    <div class="grow"><h1 class="title">Мастерская корабля</h1></div>
+    <div class="wallet"><span class="bal" id="bal">⭐ 0</span><a class="pill" href="race-editor.html?quest=1">🏆 Заработать</a></div>
+  </header>
+  <div class="profile-grid">
+    <div class="stage"><canvas id="scene"></canvas><div class="hint" id="stage-hint">Твой корабль для гонки</div></div>
+    <div class="choose shop" id="shop"></div>
+  </div>
+</main>
+<div id="toast"></div>
+<script type="module" src="src/ship-editor.js"></script>
+</body>
+</html>

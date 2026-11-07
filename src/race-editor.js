@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { Joystick } from './runner.js';
 import { instantPress } from './touch-camera.js';
 import { apiBase } from './net.js';
+import { points, TASKS, MINUTES_PER_DAY } from './points.js';
 import { W, H, CELL, MAX_BLOCKS, BLOCKS, T, DIFFS, keyOf, xyzOf, inField, newDesign, encode, decode, analyze, autoComplete, trackName, myRaces } from './race-design.js';
 
 const $ = (id) => document.getElementById(id);
@@ -19,6 +20,34 @@ function toast(text, ms = 2200) {
   toast.t = setTimeout(() => el.classList.remove('show'), ms);
 }
 
+/* ── «Редактор с заданиями» (?quest=1): за задания и минуты стройки — ⭐ баллы на ачивки корабля. Реклама — позже. ── */
+const QUEST = qs.has('quest');
+let builtThisMinute = false;
+function drawQuest() {
+  if (!QUEST) return;
+  const done = TASKS.filter((t) => points.isDone(t.id)).length;
+  $('quest-bal').textContent = `⭐${points.balance()}`;
+  $('quest-n').textContent = `· ${done}/${TASKS.length}`;
+  $('quest-list').innerHTML = TASKS.map((t) => `<div class="t${points.isDone(t.id) ? ' done' : ''}"><span>${points.isDone(t.id) ? '✅' : t.icon}</span><span>${t.name}</span><span class="p">+${t.pts}</span></div>`).join('')
+    + `<div class="t"><span>⏱️</span><span>Минута стройки: сегодня ${points.minutesToday()}/${MINUTES_PER_DAY}</span><span class="p">+1</span></div>`
+    + '<a class="shop" href="ship.html">🛠 Мастерская корабля</a>';
+}
+function questCheck() {
+  if (!QUEST || borrowed) return;       // за чужую трассу или пример баллы не даём — только за свою
+  for (const [t, got] of points.checkDesign(design)) if (got) toast(`${t.icon} Задание выполнено: +${got} ⭐`, 2200);
+  drawQuest();
+}
+if (QUEST) {
+  $('quest').hidden = false;
+  setTimeout(() => { if (borrowed) toast('🏆 Задания засчитываются только на своей трассе — начни новую: 🏠 → «＋ Новая»', 4000); }, 600);
+  $('quest-head').onclick = () => $('quest').classList.toggle('open');
+  setInterval(() => {
+    if (!builtThisMinute || document.hidden) return;
+    builtThisMinute = false;
+    if (points.minute()) { toast('⏱️ +1 ⭐ за минуту стройки', 1400); drawQuest(); }
+  }, 60000);
+}
+
 /* ── что открываем ── */
 let design = null, saveId = null;
 if (qs.get('edit')) { const it = myRaces.get(qs.get('edit')); if (it) { design = decode(it.code); saveId = it.id; } }
@@ -28,6 +57,7 @@ if (!design) {
   design.blocks.set(keyOf(16, 0, 4), T.start);     // в старом поле 32×32: короткая трасса читается и версией 1.7
 }
 const blocks = design.blocks;
+const borrowed = !!qs.get('code') && !qs.get('edit') || !!(saveId && myRaces.get(saveId)?.copy);
 
 /* ── пиксельные текстуры блоков: своя космическая палитра ── */
 function pixelCanvas(paint) {
@@ -181,14 +211,14 @@ function refresh(changed = true) {
   $('btn-fix').hidden = !fixOps;
   $('btn-name').textContent = trackName(design);
   $('btn-diff').textContent = DIFFS[design.d].name;
-  if (changed) { published = false; if (saveTimer === null) saveTimer = setTimeout(save, 300); }
+  if (changed) { published = false; builtThisMinute = true; if (saveTimer === null) saveTimer = setTimeout(save, 300); questCheck(); }
 }
 let saveTimer = null, published = false, fixOps = null;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = null;
   if (!blocks.size) return;
-  saveId = myRaces.save(saveId, design).id;
+  saveId = myRaces.save(saveId, design, borrowed).id;
 }
 addEventListener('pagehide', () => { if (saveTimer !== null) save(); });
 
@@ -254,7 +284,7 @@ $('btn-diff').onclick = () => { const ids = Object.keys(DIFFS); design.d = ids[(
 $('btn-fly').onclick = () => {
   if (!analysis.ok) { toast(analysis.errors[0]); return; }
   save();
-  location.href = `race.html?code=${encodeURIComponent(encode(design))}&edit=${encodeURIComponent(saveId)}${qs.has('debug') ? '&debug' : ''}`;
+  location.href = `race.html?code=${encodeURIComponent(encode(design))}&edit=${encodeURIComponent(saveId)}${QUEST ? '&quest=1' : ''}${qs.has('debug') ? '&debug' : ''}`;
 };
 $('btn-team').onclick = () => {
   if (!analysis.ok) { toast(analysis.errors[0]); return; }
@@ -269,7 +299,12 @@ $('btn-pub').onclick = async () => {
   try {
     const r = await fetch(`${apiBase()}api/tracks`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: encode(design) });
     const j = await r.json();
-    if (r.ok) { published = true; toast('🌍 Теперь эту трассу видят все игроки!', 3000); }
+    if (r.ok) {
+      published = true;
+      const got = QUEST ? points.complete('share') : 0;
+      toast(got ? `🌍 Трассу видят все! Задание: +${got} ⭐` : '🌍 Теперь эту трассу видят все игроки!', 3000);
+      drawQuest();
+    }
     else toast(j.error || 'Не получилось');
   } catch (e) { toast('Нет связи с сервером'); }
   b.disabled = false;
@@ -400,7 +435,8 @@ function tick() {
   renderer.render(scene, camera);
 }
 refresh(false);
+drawQuest();
 setTool(T.path);
 tick();
-if (qs.has('debug')) window.__ed = { design, blocks, camera, pickAt, setTool, undo, T, xyzOf, keyOf, get analysis() { return analysis; }, get saveId() { return saveId; }, look(y, p) { yaw = y; pitch = p; },
+if (qs.has('debug')) window.__ed = { design, blocks, camera, pickAt, setTool, undo, T, xyzOf, keyOf, get analysis() { return analysis; }, get saveId() { return saveId; }, points, look(y, p) { yaw = y; pitch = p; },
   put(k, t) { if (t < 0) blocks.delete(k); else blocks.set(k, t); refresh(); } };

@@ -223,6 +223,30 @@ export const CASTLE_LEVELS = [
   },
 ];
 
+/**
+ * Карта «Крепости»: восемь новых дорожек, башня игрока — замок. Тени — Маскот, привидений с каждым уровнем больше.
+ * hpK и teamHp подобраны симулятором (node tools/balance.mjs --fit-levels / --tune-team --level fort/N).
+ */
+const fort = (id, name, hint, path, o) => ({ id, name, hint, path, spots: 8, enemy: 'maskot', friends: ['castle'], ...o });
+export const FORT_LEVELS = [
+  fort(1, 'Тропинка', 'Короткая дорожка с одним поворотом: поставь замок у изгиба.',
+    [[-40, -12], [-8, -12], [-8, 12], [40, 12]], { hpK: 7.55, teamHp: [1.49, 1.1, 1.86], shells: 140, target: 8, speed: 0.95, ghosts: 0.3, sky: 0xf2c48d, sea: 0x2f7fa0, land: 0x9db36e }),
+  fort(2, 'Подкова', 'Дорожка гнётся подковой: замок в середине достаёт до двух сторон.',
+    [[-34, -28], [-34, 22], [-4, 22], [-4, -20], [28, -20], [28, 32]], { hpK: 7.41, teamHp: [1.64, 2.73, 2.05], shells: 150, target: 9, speed: 1, ghosts: 0.32, sky: 0xf0b98a, sea: 0x2c789a, land: 0x98ad69 }),
+  fort(3, 'Змейка', 'Длинная змейка: теням идти долго, а тебе — успеть вырасти.',
+    zig(3, 30, -30, 20), { hpK: 11.02, teamHp: [1.36, 1.28, 2.49], shells: 150, target: 10, speed: 1, ghosts: 0.35, sky: 0xe9ad86, sea: 0x297294, land: 0x93a865 }),
+  fort(4, 'Улитка', 'Дорожка закручивается внутрь — к домику в самой середине.',
+    spiral(1.25, 40, 2), { hpK: 6.58, teamHp: [1.63, 1.17, 4.01], shells: 160, target: 11, speed: 1.05, ghosts: 0.38, sky: 0xe3a283, sea: 0x266b8e, land: 0x8fa462 }),
+  fort(5, 'Ступени', 'Лестница поворотов: тени то ближе, то дальше от замков.',
+    [[-36, -30], [-22, -30], [-22, -12], [-4, -12], [-4, 6], [12, 6], [12, 24], [38, 24]], { hpK: 5.76, teamHp: [1.72, 2.69, 1.2], shells: 170, target: 12, speed: 1.1, ghosts: 0.4, sky: 0xd99a85, sea: 0x236488, land: 0x8a9f5f }),
+  fort(6, 'Кольцо', 'Тени обходят крепость по кругу. Расти замки повыше!',
+    ring(32, Math.PI, -Math.PI * 0.85, 24), { hpK: 4.47, teamHp: [2, 2.58, 3.65], shells: 180, target: 13, speed: 1.15, ghosts: 0.42, sky: 0xcf9289, sea: 0x205e82, land: 0x86995c }),
+  fort(7, 'Два холма', 'Дорожка перелезает два холма — у каждого свой поворот.',
+    [[-40, 0], [-26, -28], [0, -28], [0, 28], [26, 28], [40, 0]], { hpK: 4.03, teamHp: [1.33, 3.28, 2.61], shells: 190, target: 14, speed: 1.2, ghosts: 0.45, sky: 0xc48b8f, sea: 0x1d587c, land: 0x829459 }),
+  fort(8, 'Лабиринт крепости', 'Последняя крепость: длинный лабиринт, быстрые тени и много привидений.',
+    [[-36, -28], [28, -28], [28, -9], [-22, -9], [-22, 10], [28, 10], [28, 28], [-36, 28]], { hpK: 4.83, teamHp: [1.4, 1.75, 2.45], shells: 200, target: 16, speed: 1.25, ghosts: 0.5, sky: 0xb88596, sea: 0x1a5276, land: 0x7e8f56 }),
+];
+
 /* ─────────────────── карты ─────────────────── */
 
 /** Экспериментальная карта: только в экспериментальной сборке, при создании можно включить friendly fire. */
@@ -239,6 +263,13 @@ export const RACE_LEVELS = [
   { id: 1, name: 'Орбита', hint: 'Широкие проходы и пологие виражи: привыкни к заносу.', seed: 11, length: 2600, vmax: 70, drift: 0.5, coil: [46, 340], sway: 40, gap: 230, hole: 6.2, kinds: ['gate', 'rocks', 'gate', 'half'], target: 3 },
   { id: 2, name: 'Кольца', hint: 'Быстрее и круче, появляются вращающиеся балки.', seed: 27, length: 3400, vmax: 85, drift: 0.65, coil: [62, 300], sway: 50, gap: 200, hole: 5.4, kinds: ['gate', 'rocks', 'half', 'bar'], target: 3 },
   { id: 3, name: 'Чёрная дыра', hint: 'Самый длинный и крутой тоннель. На такой скорости заносит всерьёз!', seed: 42, length: 4400, vmax: 100, drift: 0.8, coil: [80, 270], sway: 60, gap: 180, hole: 4.8, kinds: ['gate', 'bar', 'rocks', 'half', 'bar'], target: 3 },
+  { id: 4, name: 'Метеоритный дождь', hint: 'Камни летят стаями — ищи просвет между ними.', seed: 51, length: 3000, vmax: 80, drift: 0.6, coil: [55, 320], sway: 45, gap: 190, hole: 5.6, kinds: ['rocks', 'rocks', 'gate', 'bar'], target: 3 },
+  { id: 5, name: 'Туманность', hint: 'Стены по полтоннеля: смотри, с какой стороны проход.', seed: 63, length: 3400, vmax: 86, drift: 0.66, coil: [66, 290], sway: 55, gap: 195, hole: 5.3, kinds: ['half', 'gate', 'half', 'bar'], target: 3 },
+  { id: 6, name: 'Кольца Сатурна', hint: 'Много колец-ворот подряд. Не разгоняйся слишком сильно!', seed: 77, length: 3600, vmax: 90, drift: 0.7, coil: [60, 250], sway: 65, gap: 185, hole: 5.1, kinds: ['gate', 'gate', 'bar', 'rocks'], target: 3 },
+  { id: 7, name: 'Хвост кометы', hint: 'Тоннель вьётся широкими петлями — заносит на каждой.', seed: 88, length: 3900, vmax: 94, drift: 0.76, coil: [82, 300], sway: 50, gap: 180, hole: 5, kinds: ['half', 'bar', 'rocks', 'gate'], target: 3 },
+  { id: 8, name: 'Звёздный водоворот', hint: 'Крутые витки и вертушки: тормози перед поворотом.', seed: 99, length: 4100, vmax: 98, drift: 0.8, coil: [90, 240], sway: 60, gap: 175, hole: 4.9, kinds: ['bar', 'gate', 'bar', 'half'], target: 3 },
+  { id: 9, name: 'Пояс астероидов', hint: 'Камней больше всего. Лови ускорители между ними!', seed: 111, length: 4500, vmax: 102, drift: 0.76, coil: [76, 260], sway: 75, gap: 170, hole: 4.8, kinds: ['rocks', 'rocks', 'half', 'gate', 'bar'], target: 3 },
+  { id: 10, name: 'Сверхновая', hint: 'Самая быстрая трасса: всё сразу и занос на пределе.', seed: 123, length: 5000, vmax: 108, drift: 0.78, coil: [96, 250], sway: 70, gap: 165, hole: 4.7, kinds: ['gate', 'bar', 'rocks', 'half', 'bar'], target: 3 },
 ];
 
 export const MAPS = {
@@ -250,6 +281,11 @@ export const MAPS = {
     id: 'castle', name: 'Замок', emoji: '🏰', preview: 'assets/castle/preview.jpg',
     about: 'Пять залов замка: строй башни и расти их до настоящей крепости. Тут водятся привидения!',
     levels: CASTLE_LEVELS,
+  },
+  fort: {
+    id: 'fort', name: 'Крепости', emoji: '🛡️', preview: 'assets/preview-fort.jpg',
+    about: 'Восемь крепостей: новые дорожки, быстрые тени и всё больше привидений. Расти замки!',
+    levels: FORT_LEVELS,
   },
   race: {
     id: 'race', name: 'Гонка', emoji: '🚀', preview: 'assets/preview-race.jpg', race: true,
@@ -277,7 +313,7 @@ export function levelById(mapId, id) {
 export function spotsOf(level) {
   if (level.spotsList) return level.spotsList;
   if (level.maze) return mazeSpots(level);
-  if (level.map === 'castle') return castleSpots(level.path, level.spots || 7);
+  if (level.map === 'castle' || level.map === 'fort') return castleSpots(level.path, level.spots || 7);
   if (level.paths) {                 // несколько дорожек: плиты вдоль каждой поровну, без наложений
     const per = Math.ceil((level.spots || 12) / level.paths.length);
     const all = [];

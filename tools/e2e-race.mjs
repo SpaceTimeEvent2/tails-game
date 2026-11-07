@@ -42,7 +42,7 @@ const flying = (page) => page.waitForFunction(() => window.__race.state === 'go'
   await page.screenshot({ path: path.join(SHOTS, 'race-menu.png') });
   await page.goto(`${BASE}/map.html?map=race`);
   const lv = await page.$$eval('#levels .lvl', (els) => els.map((e) => [e.tagName, e.getAttribute('href')]));
-  check(lv.length === 4 && lv[0][1] === 'race.html?level=1' && lv[1][0] === 'DIV' && lv[3][1] === 'races.html', `новый игрок: открыта первая трасса, остальные по порядку (${lv.length})`);
+  check(lv.length === 11 && lv[0][1] === 'race.html?level=1' && lv[1][0] === 'DIV' && lv[10][1] === 'races.html', `10 трасс: новому игроку открыта первая, остальные по порядку (${lv.length})`);
   // кто уже играл до этой версии — у того открыто всё
   const ctx2 = await browser.createBrowserContext(), old = await ctx2.newPage();
   await old.goto(`${BASE}/style.css`);

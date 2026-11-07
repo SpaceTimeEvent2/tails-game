@@ -359,14 +359,25 @@ export const EXAMPLES = [
   sketch(1, 1, 'easy', [6, 0, 4], 's E5 g E5 o E4 N5 h N5 U2 W6 r W6 N6 g E12 o E2 f'),
   sketch(5, 0, 'mid', [4, 0, 4], 's E4 h E3 x @a E3 b E2 g E3 x @m >a N4 E4 o E4 S4 >m E4 N6 g N2 U2 W6 x @c W3 r W3 x @d >c U3 W3 o W3 D3 >d N6 o W4 f'),
   sketch(2, 4, 'hard', [10, 0, 10], 's E8 g N8 r W8 h S7 U2 S E8 b N4 x @a N4 W4 g W4 x @b >a E2 N6 W6 o W6 S2 E2 >b U2 S8 E8 b N8 W4 o W f'),
+  // лестница вверх: три этажа, на каждом своя преграда
+  sketch(9, 6, 'mid', [4, 0, 4], 's E10 g E2 N10 r N2 U3 W12 h W2 S6 o S2 U3 E14 b E2 N4 f'),
+  // тройная развилка: прямо с ускорителем, вверх по кругу через вертушку или вниз через камни
+  sketch(4, 9, 'mid', [2, 0, 10], 's E5 h E1 x @a E3 o E5 x @m >a N4 E4 b E4 S4 >a S4 E4 r E4 N4 >m E5 g E4 f'),
+  // горки: вверх-вниз, как в аквапарке
+  sketch(12, 15, 'hard', [2, 0, 16], 's E3 U4 E3 o D4 E3 U4 b E3 D4 r E3 U3 E3 g D3 E3 f'),
+  // мост: трасса пролетает над собой
+  sketch(13, 3, 'easy', [4, 0, 4], 's E12 g N12 r W6 U2 S14 o S2 W6 f'),
+  // длинная лента для новичков
+  sketch(6, 14, 'easy', [2, 0, 2], 's E8 g E10 o E8 N3 W8 h W10 r W8 N3 E8 b E10 g E8 N3 W12 o W12 f'),
 ];
 
 /* ── свои трассы на устройстве ── */
 const KEY = 'tg.my.races';
 export const myRaces = {
   list() { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } },
-  save(id, design) {
-    const all = this.list(), item = { id: id || `t${Date.now().toString(36)}`, code: encode(design), at: Date.now() };
+  save(id, design, copy = false) {
+    const all = this.list(), was = all.find((x) => x.id === id);
+    const item = { id: id || `t${Date.now().toString(36)}`, code: encode(design), at: Date.now(), ...(copy || was?.copy ? { copy: true } : {}) };
     const i = all.findIndex((x) => x.id === item.id);
     if (i >= 0) all[i] = item; else all.unshift(item);
     localStorage.setItem(KEY, JSON.stringify(all.slice(0, 50)));

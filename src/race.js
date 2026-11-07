@@ -12,7 +12,8 @@ import { MAPS, progress } from './levels.js';
 import { audio } from './audio.js';
 import { TUBE_R, buildTrack, sample, barAngle, newRacer, stepRacer, botInput, routeOf, fire, stepShot, shotHits, zap, botAims, worldAt, SHOT, mudBomb, BOMB } from './race-sim.js';
 import { buildCourse, decode as decodeTrack, W as FIELD, CELL as FIELD_CELL } from './race-design.js';
-import { makeShip } from './ships.js';
+import { makeShip, addFlames } from './ships.js';
+import { parseKit, kitString, itemById } from './shop.js';
 import { replays } from './replays.js';
 
 const $ = (id) => document.getElementById(id);
@@ -45,7 +46,7 @@ let def = null;
 if (ROOM) {
   $('load-text').textContent = `Входим в гонку ${ROOM}…`;
   net = new Net();
-  await net.connect({ name: profile.name || 'Игрок', color: profile.color, emoji: profile.emoji, hero: profile.hero, tint: profile.tint, ship: profile.ship });
+  await net.connect({ name: profile.name || 'Игрок', color: profile.color, emoji: profile.emoji, hero: profile.hero, tint: profile.tint, ship: profile.ship, kit: kitString(profile.kit) });
   myId = net.id;
   room = await new Promise((resolve) => {
     const t = setTimeout(() => failPage(`Не получилось войти в гонку ${ROOM}`), 8000);
@@ -297,14 +298,12 @@ async function ensureHero(hero) {
   loaded.add(hero);
   try { await loadRunnerModel(loader, hero); } catch (e) { console.error(e); }
 }
-const flameGeo = new THREE.ConeGeometry(0.34, 1, 10);
-flameGeo.translate(0, 0.5, 0);
-flameGeo.rotateX(-Math.PI / 2);         // основание у двигателя, острие назад, по −Z
-
 /** Гонщик: треугольный корабль, выбранный в профиле, в цвете игрока; из сопел бьют реактивные струи. */
 class Rider {
-  constructor({ id, color, name, hero, tint, ship, isMe, racer, skill }) {
-    this.id = id; this.color = color; this.name = name; this.isMe = isMe; this.emoji = name; this.ship = ship;
+  constructor({ id, color, name, hero, tint, ship, kit = {}, isMe, racer, skill }) {
+    const badge = itemById(kit.badge);
+    if (badge && !isMe) name = `${name} ${badge.icon}`;          // значок-ачивка рядом с именем
+    this.id = id; this.color = color; this.name = name; this.isMe = isMe; this.emoji = name; this.ship = ship; this.kit = kit;
     this.p = racer; this.skill = skill;
     this.r = new Runner(scene, { color, name: isMe ? '' : name, me: isMe, hero: loaded.has(hero) || hero === 'ghost' ? hero : 'maskot', tint });
     const r = this.r;
@@ -312,18 +311,9 @@ class Rider {
     r.mixer.stopAllAction();
     r.walk = r.run = null;
     r.body.visible = false;
-    const body = makeShip(ship, color, isMe ? 0xffffff : color);
+    const body = makeShip(ship, color, isMe ? 0xffffff : color, kit);
     r.root.add(body);
-    this.flame = new THREE.Group();
-    const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
-    for (const [x, y, k] of body.userData.engines) {
-      const f = new THREE.Mesh(flameGeo, flameMat);
-      f.position.set(x, y, 0);
-      f.scale.set(k / 0.34, k / 0.34, 1);
-      this.flame.add(f);
-    }
-    this.flame.position.z = -2.1;
-    r.root.add(this.flame);
+    this.flame = addFlames(body, color, kit);
     this.roll = 0; this.pitch = 0; this.yaw = 0;
     this.px = 0; this.py = 0; this.pz = 0;
     // чужой: цель из снимка
@@ -347,7 +337,7 @@ class Rider {
     root.rotateY(this.yaw);
     root.rotateX(this.pitch);
     root.rotateZ(this.roll);
-    this.flame.scale.set(1, 1, 0.5 + (v / def.vmax) * 2.2 * (0.85 + Math.random() * 0.3));
+    this.flame.set(0.5 + (v / def.vmax) * 2.2 * (0.85 + Math.random() * 0.3));
     this.r.update(dt);
     if (this.r.label) this.r.label.position.y = 2.8;   // имя сразу над рубкой
   }
@@ -363,11 +353,12 @@ let raceT = 0;
 const finished = [];                  // порядок финиша: [{ id, t }]
 const roster = (id) => (room ? room.players.find((p) => p.id === id) : null);
 
+const BOT_TIER = def.vmax < 82 ? 1 : def.vmax < 96 ? 2 : 3;
 const BOTS = def.bots || {
   1: [[0.28, 0.84, 0.55], [0.38, 0.78, 0.4], [0.48, 0.74, 0.3]],
   2: [[0.2, 0.92, 0.7], [0.3, 0.87, 0.5], [0.42, 0.82, 0.4]],
   3: [[0.12, 0.97, 0.85], [0.25, 0.92, 0.6], [0.35, 0.87, 0.5]],
-}[def.id] || [];
+}[def.id <= 3 ? def.id : BOT_TIER] || [];
 const BOT_LOOK = [
   { name: '🤖 Комета', color: '#ff6f91', hero: 'maskot', tint: '#ff9dbb', ship: 'arrow' },
   { name: '👾 Астра', color: '#8fd0ff', hero: 'ghost', tint: '#8fd0ff', ship: 'delta' },
@@ -383,13 +374,13 @@ $('load-bar').style.width = '100%';
 
 function addMe() {
   const lane = ROOM ? Math.max(0, room.players.findIndex((p) => p.id === myId)) : 0;
-  const rider = new Rider({ id: myId, color: profile.color, name: `${profile.emoji} ${profile.name || 'Ты'}`, hero: profile.hero, tint: profile.tint, ship: profile.ship, isMe: true, racer: newRacer(lane) });
+  const rider = new Rider({ id: myId, color: profile.color, name: `${profile.emoji} ${profile.name || 'Ты'}`, hero: profile.hero, tint: profile.tint, ship: profile.ship, kit: profile.kit, isMe: true, racer: newRacer(lane) });
   riders.set(myId, rider);
   mine = rider;
 }
 if (replay) {                           // гонщики из записи: летят по координатам, без физики
   for (const rr of replay.riders) {
-    const r = new Rider({ id: rr.id, color: rr.color, name: rr.name, ship: rr.ship, isMe: !!rr.me, racer: newRacer(0) });
+    const r = new Rider({ id: rr.id, color: rr.color, name: rr.name, ship: rr.ship, kit: parseKit(rr.kit), isMe: !!rr.me, racer: newRacer(0) });
     r.play = replay.frames[rr.id];
     riders.set(rr.id, r);
     if (rr.me) mine = r;
@@ -409,7 +400,7 @@ function syncRoster() {
     if (p.id === myId) continue;
     if (!riders.has(p.id)) {
       const lane = room.players.indexOf(p);
-      const rider = new Rider({ id: p.id, color: p.color, name: `${p.emoji} ${p.name}`, hero: p.hero, tint: p.tint, ship: p.ship, racer: newRacer(lane) });
+      const rider = new Rider({ id: p.id, color: p.color, name: `${p.emoji} ${p.name}`, hero: p.hero, tint: p.tint, ship: p.ship, kit: parseKit(p.kit), racer: newRacer(lane) });
       rider.net = { s: rider.p.s, x: rider.p.x, y: rider.p.y, v: 0 };
       riders.set(p.id, rider);
     }
@@ -706,7 +697,7 @@ function saveReplay() {
     v: 1, id: recorder.id, at: recorder.at, dt: REC_DT, name: def.name || 'Гонка',
     src: ROOM ? (room.map === 'track' ? { code: room.lv } : { level: room.level }) : def.custom ? { code: qs.get('code') } : { level: def.id },
     place: me ? finished.indexOf(me) + 1 : 0, time: me ? +me.t.toFixed(1) : 0,
-    riders: [...riders.values()].filter((r) => recorder.frames[r.id]).map((r) => ({ id: r.id, name: r.isMe ? `${profile.emoji} ${profile.name || 'Ты'}` : r.name, color: r.color, ship: r.ship, me: r.isMe })),
+    riders: [...riders.values()].filter((r) => recorder.frames[r.id]).map((r) => ({ id: r.id, name: r.isMe ? `${profile.emoji} ${profile.name || 'Ты'}` : r.name, color: r.color, ship: r.ship, kit: kitString(r.kit), me: r.isMe })),
     frames: recorder.frames, shots: recorder.shots, bombs: recorder.bombs, fin: finished.map((f) => ({ id: f.id, t: +f.t.toFixed(2) })),
   });
 }
@@ -786,6 +777,7 @@ function showFinish() {
     progress.setBest('race', def.id, Math.round(10000 / (finished.find((f) => f.id === myId)?.t || 1e9)));
   }
   audio.sfx(place === 1 ? 'win' : 'clear');
+  if (qs.has('quest') && def.custom) import('./points.js').then(({ points }) => { const got = points.complete('fly'); if (got) toast(`🚀 Задание выполнено: +${got} ⭐`, 2600); });
   saveReplay();
   setTimeout(saveReplay, 6000);          // ещё немного: в запись попадут и те, кто финиширует следом
   $('ov-title').textContent = place === 1 ? '🏆 Первое место!' : `🏁 Место: ${place}`;
@@ -794,7 +786,7 @@ function showFinish() {
   const nextOk = !ROOM && MAPS.race.levels.some((l) => l.id === def.id + 1);
   $('ov-buttons').innerHTML = ROOM
     ? '<a class="huge" href="lobby.html">👫 В лобби</a>'
-    : def.custom ? `<a class="huge" href="${esc(location.pathname.split('/').pop() + location.search)}">🔁 Ещё раз</a>${qs.get('edit') ? `<a class="huge rose" href="race-editor.html?edit=${encodeURIComponent(qs.get('edit'))}">🧱 В редактор</a>` : `<a class="huge rose" href="race-editor.html?code=${encodeURIComponent(qs.get('code'))}">🧱 Поменять</a>`}<a class="huge ghost" href="races.html">Трассы</a>`
+    : def.custom ? `<a class="huge" href="${esc(location.pathname.split('/').pop() + location.search)}">🔁 Ещё раз</a>${qs.get('edit') ? `<a class="huge rose" href="race-editor.html?edit=${encodeURIComponent(qs.get('edit'))}${qs.has('quest') ? '&quest=1' : ''}">🧱 В редактор</a>` : `<a class="huge rose" href="race-editor.html?code=${encodeURIComponent(qs.get('code'))}${qs.has('quest') ? '&quest=1' : ''}">🧱 Поменять</a>`}<a class="huge ghost" href="races.html">Трассы</a>`
     : `<a class="huge" href="race.html?level=${def.id}">🔁 Ещё раз</a>${nextOk ? `<a class="huge rose" href="race.html?level=${def.id + 1}">🚀 Следующая</a>` : ''}<a class="huge ghost" href="map.html?map=race">Трассы</a>`;
   if (recorder) $('ov-buttons').insertAdjacentHTML('beforeend', `<a class="huge ghost" href="race.html?replay=${recorder.id}${qs.has('debug') ? '&debug' : ''}" id="btn-replay">📼 Повтор</a>`);
   $('btn-replay')?.addEventListener('click', saveReplay);

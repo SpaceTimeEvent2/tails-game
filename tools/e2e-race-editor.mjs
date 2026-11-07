@@ -245,8 +245,8 @@ async function phone(name, width = 800, height = 360) {
   const { page, ctx } = await phone('список');
   await page.goto(`${BASE}/races.html`);
   await page.$eval('[data-tab="samples"]', (b) => b.click());
-  await page.waitForFunction(() => document.querySelectorAll('#levels .lvl').length === 3);
-  check(true, 'три примера трасс в списке');
+  await page.waitForFunction((n) => document.querySelectorAll('#levels .lvl').length === n, {}, EXAMPLES.length);
+  check(true, `${EXAMPLES.length} примеров трасс в списке`);
   await page.screenshot({ path: path.join(SHOTS, 'races-samples.png') });
   await ctx.close();
 }
